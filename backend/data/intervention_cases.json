@@ -1,0 +1,1032 @@
+{
+  "cases": [
+    {
+      "case_id": "case_001",
+      "metadata": {
+        "location_name": "Dense Urban Center - Mediterranean",
+        "climate_type": "Mediterranean",
+        "analysis_period": "July 1-31, 10:00-18:00",
+        "latitude": 48.86,
+        "longitude": 2.35
+      },
+      "building_context": {
+        "avg_height_m": 25,
+        "building_density": "high",
+        "sky_view_factor": 0.3,
+        "vegetation_coverage_pct": 15,
+        "building_type": "mixed_residential",
+        "area_m2": 12000
+      },
+      "initial_vulnerability": {
+        "score": 7.2,
+        "peak_utci_celsius": 48,
+        "mean_utci_celsius": 38,
+        "heat_stress_hours_pct": 35,
+        "drivers": ["urban_heat_island", "vegetation_deficit", "poor_ventilation"],
+        "driver_severity": {
+          "urban_heat_island": 0.85,
+          "vegetation_deficit": 0.72,
+          "poor_ventilation": 0.65,
+          "surface_temperature": 0.78
+        }
+      },
+      "interventions_applied": [
+        {
+          "type": "urban_forest",
+          "area_m2": 8000,
+          "tree_coverage_pct": 20,
+          "species": ["deciduous_mixed"],
+          "implementation_months": 6,
+          "cost_estimate_usd": 250000,
+          "canopy_height_m": 12
+        },
+        {
+          "type": "cool_pavements",
+          "area_m2": 5000,
+          "albedo": 0.65,
+          "material": "permeable_light_concrete",
+          "implementation_months": 3,
+          "cost_estimate_usd": 75000
+        }
+      ],
+      "results": {
+        "temperature_reduction_celsius": 3.2,
+        "peak_utci_reduction": 4.0,
+        "mean_utci_reduction": 2.8,
+        "heat_stress_hours_reduction_pct": 18,
+        "vegetation_increase_pct": 22,
+        "building_surface_temp_reduction": 5.5,
+        "timeline_months": 8,
+        "net_thermal_improvement": "High"
+      },
+      "lessons_learned": "Combining tree canopy with cool surfaces most effective for tall dense buildings. Tree maturation critical for long-term benefits. Requires regular maintenance to sustain cooling effects."
+    },
+    {
+      "case_id": "case_002",
+      "metadata": {
+        "location_name": "Mid-Rise Commercial - Subtropical",
+        "climate_type": "Subtropical",
+        "analysis_period": "August 1-31, 08:00-20:00",
+        "latitude": 34.05,
+        "longitude": -118.24
+      },
+      "building_context": {
+        "avg_height_m": 35,
+        "building_density": "medium",
+        "sky_view_factor": 0.5,
+        "vegetation_coverage_pct": 10,
+        "building_type": "commercial",
+        "area_m2": 15000
+      },
+      "initial_vulnerability": {
+        "score": 6.8,
+        "peak_utci_celsius": 52,
+        "mean_utci_celsius": 42,
+        "heat_stress_hours_pct": 45,
+        "drivers": ["urban_heat_island", "surface_temperature", "poor_ventilation"],
+        "driver_severity": {
+          "urban_heat_island": 0.72,
+          "surface_temperature": 0.88,
+          "poor_ventilation": 0.68,
+          "vegetation_deficit": 0.55
+        }
+      },
+      "interventions_applied": [
+        {
+          "type": "cool_roofs",
+          "area_m2": 10000,
+          "albedo": 0.70,
+          "material": "reflective_coating",
+          "implementation_months": 2,
+          "cost_estimate_usd": 120000
+        },
+        {
+          "type": "vertical_greening",
+          "area_m2": 3000,
+          "coverage_pct": 25,
+          "system_type": "living_wall",
+          "implementation_months": 4,
+          "cost_estimate_usd": 200000
+        },
+        {
+          "type": "permeable_pavements",
+          "area_m2": 6000,
+          "albedo": 0.55,
+          "infiltration_rate_mmphr": 25,
+          "implementation_months": 3,
+          "cost_estimate_usd": 90000
+        }
+      ],
+      "results": {
+        "temperature_reduction_celsius": 2.8,
+        "peak_utci_reduction": 3.5,
+        "mean_utci_reduction": 2.2,
+        "heat_stress_hours_reduction_pct": 22,
+        "vegetation_increase_pct": 18,
+        "building_surface_temp_reduction": 8.0,
+        "timeline_months": 6,
+        "net_thermal_improvement": "High"
+      },
+      "lessons_learned": "Cool roofs provide immediate relief; best ROI. Vertical greening slower to establish but provides urban aesthetics. Permeable pavements improve localized cooling and stormwater management."
+    },
+    {
+      "case_id": "case_003",
+      "metadata": {
+        "location_name": "Historic Dense Quarter - Temperate",
+        "climate_type": "Temperate",
+        "analysis_period": "June 15 - August 15, 10:00-18:00",
+        "latitude": 51.51,
+        "longitude": -0.13
+      },
+      "building_context": {
+        "avg_height_m": 18,
+        "building_density": "very_high",
+        "sky_view_factor": 0.2,
+        "vegetation_coverage_pct": 8,
+        "building_type": "residential_mixed",
+        "area_m2": 8000
+      },
+      "initial_vulnerability": {
+        "score": 5.9,
+        "peak_utci_celsius": 42,
+        "mean_utci_celsius": 32,
+        "heat_stress_hours_pct": 18,
+        "drivers": ["vegetation_deficit", "poor_ventilation", "urban_heat_island"],
+        "driver_severity": {
+          "vegetation_deficit": 0.85,
+          "poor_ventilation": 0.72,
+          "urban_heat_island": 0.60,
+          "surface_temperature": 0.65
+        }
+      },
+      "interventions_applied": [
+        {
+          "type": "green_roofs",
+          "area_m2": 4000,
+          "coverage_pct": 100,
+          "system_type": "extensive",
+          "vegetation_depth_cm": 15,
+          "implementation_months": 5,
+          "cost_estimate_usd": 280000
+        },
+        {
+          "type": "street_trees",
+          "count": 80,
+          "species": ["london_plane", "oak"],
+          "avg_mature_height_m": 14,
+          "canopy_coverage_pct": 15,
+          "implementation_months": 4,
+          "cost_estimate_usd": 160000
+        },
+        {
+          "type": "pocket_parks",
+          "area_m2": 2000,
+          "green_coverage_pct": 70,
+          "water_features": true,
+          "implementation_months": 8,
+          "cost_estimate_usd": 300000
+        }
+      ],
+      "results": {
+        "temperature_reduction_celsius": 2.1,
+        "peak_utci_reduction": 2.8,
+        "mean_utci_reduction": 1.9,
+        "heat_stress_hours_reduction_pct": 12,
+        "vegetation_increase_pct": 28,
+        "building_surface_temp_reduction": 3.2,
+        "timeline_months": 12,
+        "net_thermal_improvement": "Moderate"
+      },
+      "lessons_learned": "Historic districts require sensitive interventions. Green roofs compatible with traditional architecture. Street trees take time to mature but provide long-term benefits. Community engagement crucial for pocket parks."
+    },
+    {
+      "case_id": "case_004",
+      "metadata": {
+        "location_name": "Waterfront Development - Humid Subtropical",
+        "climate_type": "Humid_Subtropical",
+        "analysis_period": "July 1-31, 09:00-19:00",
+        "latitude": 30.27,
+        "longitude": -97.74
+      },
+      "building_context": {
+        "avg_height_m": 20,
+        "building_density": "medium",
+        "sky_view_factor": 0.6,
+        "vegetation_coverage_pct": 12,
+        "building_type": "mixed_use",
+        "area_m2": 10000,
+        "proximity_to_water": "adjacent"
+      },
+      "initial_vulnerability": {
+        "score": 6.5,
+        "peak_utci_celsius": 50,
+        "mean_utci_celsius": 40,
+        "heat_stress_hours_pct": 38,
+        "drivers": ["surface_temperature", "urban_heat_island", "vegetation_deficit"],
+        "driver_severity": {
+          "surface_temperature": 0.82,
+          "urban_heat_island": 0.75,
+          "vegetation_deficit": 0.68,
+          "poor_ventilation": 0.55
+        }
+      },
+      "interventions_applied": [
+        {
+          "type": "water_features",
+          "area_m2": 3500,
+          "water_coverage_pct": 100,
+          "feature_types": ["fountains", "retention_ponds"],
+          "surface_treatment": "dark_bottom",
+          "implementation_months": 5,
+          "cost_estimate_usd": 350000
+        },
+        {
+          "type": "shade_structures",
+          "area_m2": 4000,
+          "structure_type": "pergolas_and_canopies",
+          "material": "climbing_vegetation",
+          "coverage_pct": 60,
+          "implementation_months": 3,
+          "cost_estimate_usd": 150000
+        },
+        {
+          "type": "vegetation_corridors",
+          "length_m": 800,
+          "width_m": 15,
+          "planting_density": "dense",
+          "species": ["native_shrubs", "canopy_trees"],
+          "implementation_months": 6,
+          "cost_estimate_usd": 200000
+        }
+      ],
+      "results": {
+        "temperature_reduction_celsius": 3.4,
+        "peak_utci_reduction": 4.2,
+        "mean_utci_reduction": 3.0,
+        "heat_stress_hours_reduction_pct": 25,
+        "vegetation_increase_pct": 32,
+        "building_surface_temp_reduction": 6.8,
+        "timeline_months": 10,
+        "net_thermal_improvement": "High"
+      },
+      "lessons_learned": "Water features provide significant evaporative cooling near buildings. Shade structures work best when integrated with vegetation. Native plant corridors enhance local ecology while cooling. Waterfront proximity enhances effectiveness of interventions."
+    },
+    {
+      "case_id": "case_005",
+      "metadata": {
+        "location_name": "Arid City Core - Desert",
+        "climate_type": "Arid_Desert",
+        "analysis_period": "July 1-31, 07:00-19:00",
+        "latitude": 33.37,
+        "longitude": 44.36
+      },
+      "building_context": {
+        "avg_height_m": 22,
+        "building_density": "high",
+        "sky_view_factor": 0.35,
+        "vegetation_coverage_pct": 5,
+        "building_type": "mixed_commercial",
+        "area_m2": 9000
+      },
+      "initial_vulnerability": {
+        "score": 7.8,
+        "peak_utci_celsius": 56,
+        "mean_utci_celsius": 44,
+        "heat_stress_hours_pct": 62,
+        "drivers": ["surface_temperature", "vegetation_deficit", "urban_heat_island"],
+        "driver_severity": {
+          "surface_temperature": 0.95,
+          "vegetation_deficit": 0.90,
+          "urban_heat_island": 0.80,
+          "poor_ventilation": 0.70
+        }
+      },
+      "interventions_applied": [
+        {
+          "type": "reflective_surfaces",
+          "area_m2": 12000,
+          "target_surfaces": ["streets", "parking", "building_facades"],
+          "avg_albedo_improvement": 0.35,
+          "material": "light_colored_coating",
+          "implementation_months": 4,
+          "cost_estimate_usd": 180000
+        },
+        {
+          "type": "desert_landscaping",
+          "area_m2": 5000,
+          "species": ["drought_resistant_trees", "xerophytes"],
+          "planting_density": "moderate",
+          "irrigation_requirement": "minimal",
+          "implementation_months": 8,
+          "cost_estimate_usd": 120000
+        },
+        {
+          "type": "ventilation_corridors",
+          "length_m": 1200,
+          "width_m": 25,
+          "orientation": "prevailing_wind",
+          "surface_treatment": "light_colored",
+          "implementation_months": 6,
+          "cost_estimate_usd": 180000
+        }
+      ],
+      "results": {
+        "temperature_reduction_celsius": 2.5,
+        "peak_utci_reduction": 3.2,
+        "mean_utci_reduction": 2.1,
+        "heat_stress_hours_reduction_pct": 20,
+        "vegetation_increase_pct": 12,
+        "building_surface_temp_reduction": 7.0,
+        "timeline_months": 10,
+        "net_thermal_improvement": "Moderate"
+      },
+      "lessons_learned": "In arid climates, surface reflectivity most critical. Water-based interventions costly and unsustainable. Drought-resistant vegetation essential. Wind corridors must align with prevailing winds. Maintenance critical in harsh conditions."
+    },
+    {
+      "case_id": "case_006",
+      "metadata": {
+        "location_name": "Tropical Urban Node - Humid Tropical",
+        "climate_type": "Tropical",
+        "analysis_period": "December 15 - January 31, 11:00-17:00",
+        "latitude": 1.35,
+        "longitude": 103.82
+      },
+      "building_context": {
+        "avg_height_m": 28,
+        "building_density": "high",
+        "sky_view_factor": 0.25,
+        "vegetation_coverage_pct": 20,
+        "building_type": "commercial_residential",
+        "area_m2": 11000
+      },
+      "initial_vulnerability": {
+        "score": 6.2,
+        "peak_utci_celsius": 51,
+        "mean_utci_celsius": 43,
+        "heat_stress_hours_pct": 40,
+        "drivers": ["poor_ventilation", "urban_heat_island", "surface_temperature"],
+        "driver_severity": {
+          "poor_ventilation": 0.85,
+          "urban_heat_island": 0.70,
+          "surface_temperature": 0.75,
+          "vegetation_deficit": 0.45
+        }
+      },
+      "interventions_applied": [
+        {
+          "type": "natural_ventilation",
+          "openings_count": 120,
+          "opening_area_m2": 0.5,
+          "stack_effect_height_m": 8,
+          "implementation_months": 4,
+          "cost_estimate_usd": 200000
+        },
+        {
+          "type": "canopy_layer_vegetation",
+          "area_m2": 8000,
+          "tree_coverage_pct": 30,
+          "species": ["tropical_broadleaf"],
+          "avg_height_m": 18,
+          "implementation_months": 7,
+          "cost_estimate_usd": 180000
+        },
+        {
+          "type": "rain_gardens",
+          "area_m2": 2000,
+          "infiltration_rate": "high",
+          "vegetation": "tropical_wetland_plants",
+          "implementation_months": 3,
+          "cost_estimate_usd": 90000
+        }
+      ],
+      "results": {
+        "temperature_reduction_celsius": 1.8,
+        "peak_utci_reduction": 2.5,
+        "mean_utci_reduction": 1.5,
+        "heat_stress_hours_reduction_pct": 15,
+        "vegetation_increase_pct": 25,
+        "building_surface_temp_reduction": 2.5,
+        "timeline_months": 9,
+        "net_thermal_improvement": "Moderate"
+      },
+      "lessons_learned": "Tropical regions need passive ventilation solutions. Canopy vegetation most effective. Rain gardens support stormwater management in humid climates. Cross-ventilation critical. Less effective than other climates due to high baseline humidity."
+    },
+    {
+      "case_id": "case_007",
+      "metadata": {
+        "location_name": "Dense Low-Rise - Continental",
+        "climate_type": "Continental",
+        "analysis_period": "July 15 - August 15, 10:00-18:00",
+        "latitude": 59.33,
+        "longitude": 18.07
+      },
+      "building_context": {
+        "avg_height_m": 12,
+        "building_density": "very_high",
+        "sky_view_factor": 0.15,
+        "vegetation_coverage_pct": 10,
+        "building_type": "residential",
+        "area_m2": 7000
+      },
+      "initial_vulnerability": {
+        "score": 4.8,
+        "peak_utci_celsius": 38,
+        "mean_utci_celsius": 28,
+        "heat_stress_hours_pct": 8,
+        "drivers": ["vegetation_deficit", "surface_temperature", "urban_heat_island"],
+        "driver_severity": {
+          "vegetation_deficit": 0.75,
+          "surface_temperature": 0.60,
+          "urban_heat_island": 0.55,
+          "poor_ventilation": 0.45
+        }
+      },
+      "interventions_applied": [
+        {
+          "type": "courtyard_greening",
+          "area_m2": 3000,
+          "green_coverage_pct": 80,
+          "water_feature_pct": 10,
+          "species": ["deciduous_shrubs", "perennials"],
+          "implementation_months": 5,
+          "cost_estimate_usd": 140000
+        },
+        {
+          "type": "street_greening",
+          "linear_length_m": 500,
+          "tree_count": 60,
+          "species": ["birch", "linden"],
+          "avg_spacing_m": 8,
+          "implementation_months": 4,
+          "cost_estimate_usd": 120000
+        }
+      ],
+      "results": {
+        "temperature_reduction_celsius": 1.2,
+        "peak_utci_reduction": 1.8,
+        "mean_utci_reduction": 1.0,
+        "heat_stress_hours_reduction_pct": 5,
+        "vegetation_increase_pct": 35,
+        "building_surface_temp_reduction": 1.8,
+        "timeline_months": 7,
+        "net_thermal_improvement": "Low"
+      },
+      "lessons_learned": "In cool continental climates, heat stress minimal. Focus shifts to summer comfort and seasonal adaptation. Vegetation increases aesthetic and social value. Interventions provide secondary benefits (air quality, biodiversity) rather than cooling."
+    },
+    {
+      "case_id": "case_008",
+      "metadata": {
+        "location_name": "Mixed-Height District - Mediterranean Coastal",
+        "climate_type": "Mediterranean",
+        "analysis_period": "July 1-31, 10:00-18:00",
+        "latitude": 43.60,
+        "longitude": 7.08
+      },
+      "building_context": {
+        "avg_height_m": 30,
+        "building_density": "medium_high",
+        "sky_view_factor": 0.45,
+        "vegetation_coverage_pct": 18,
+        "building_type": "mixed_development",
+        "area_m2": 13000
+      },
+      "initial_vulnerability": {
+        "score": 6.5,
+        "peak_utci_celsius": 46,
+        "mean_utci_celsius": 36,
+        "heat_stress_hours_pct": 28,
+        "drivers": ["surface_temperature", "urban_heat_island", "vegetation_deficit"],
+        "driver_severity": {
+          "surface_temperature": 0.80,
+          "urban_heat_island": 0.68,
+          "vegetation_deficit": 0.62,
+          "poor_ventilation": 0.50
+        }
+      },
+      "interventions_applied": [
+        {
+          "type": "sky_gardens",
+          "area_m2": 6000,
+          "green_coverage_pct": 100,
+          "system_type": "intensive",
+          "vegetation_types": ["shrubs", "trees"],
+          "implementation_months": 6,
+          "cost_estimate_usd": 420000
+        },
+        {
+          "type": "light_colored_facades",
+          "area_m2": 8000,
+          "albedo": 0.60,
+          "material": "reflective_panels",
+          "implementation_months": 4,
+          "cost_estimate_usd": 160000
+        },
+        {
+          "type": "open_courtyards",
+          "area_m2": 2500,
+          "ventilation_design": "cross_flow",
+          "surface_treatment": "permeable",
+          "implementation_months": 3,
+          "cost_estimate_usd": 85000
+        }
+      ],
+      "results": {
+        "temperature_reduction_celsius": 2.9,
+        "peak_utci_reduction": 3.6,
+        "mean_utci_reduction": 2.4,
+        "heat_stress_hours_reduction_pct": 19,
+        "vegetation_increase_pct": 24,
+        "building_surface_temp_reduction": 6.2,
+        "timeline_months": 9,
+        "net_thermal_improvement": "High"
+      },
+      "lessons_learned": "Sky gardens provide high-impact cooling with space efficiency. Light facades reflect heat effectively. Open courtyards must be properly designed for cross-ventilation. Mediterranean coastal breezes can be leveraged through strategic opening placement."
+    },
+    {
+      "case_id": "case_009",
+      "metadata": {
+        "location_name": "Compact Business District - Temperate Urban",
+        "climate_type": "Temperate",
+        "analysis_period": "June 20 - August 20, 09:00-17:00",
+        "latitude": 48.22,
+        "longitude": 16.37
+      },
+      "building_context": {
+        "avg_height_m": 32,
+        "building_density": "high",
+        "sky_view_factor": 0.28,
+        "vegetation_coverage_pct": 7,
+        "building_type": "commercial",
+        "area_m2": 14000
+      },
+      "initial_vulnerability": {
+        "score": 6.1,
+        "peak_utci_celsius": 44,
+        "mean_utci_celsius": 34,
+        "heat_stress_hours_pct": 24,
+        "drivers": ["urban_heat_island", "surface_temperature", "vegetation_deficit"],
+        "driver_severity": {
+          "urban_heat_island": 0.78,
+          "surface_temperature": 0.75,
+          "vegetation_deficit": 0.70,
+          "poor_ventilation": 0.58
+        }
+      },
+      "interventions_applied": [
+        {
+          "type": "facade_greening",
+          "area_m2": 7000,
+          "coverage_pct": 40,
+          "system_type": "modular_panels",
+          "maintenance_requirement": "moderate",
+          "implementation_months": 5,
+          "cost_estimate_usd": 280000
+        },
+        {
+          "type": "plaza_retrofit",
+          "area_m2": 4000,
+          "surface_change": "permeable_pavement",
+          "tree_canopy_coverage_pct": 25,
+          "water_feature_pct": 5,
+          "implementation_months": 4,
+          "cost_estimate_usd": 320000
+        },
+        {
+          "type": "urban_breeze_lanes",
+          "length_m": 600,
+          "width_m": 20,
+          "design": "ventilation_corridor",
+          "surface_albedo": 0.55,
+          "implementation_months": 5,
+          "cost_estimate_usd": 200000
+        }
+      ],
+      "results": {
+        "temperature_reduction_celsius": 2.3,
+        "peak_utci_reduction": 3.0,
+        "mean_utci_reduction": 1.8,
+        "heat_stress_hours_reduction_pct": 16,
+        "vegetation_increase_pct": 20,
+        "building_surface_temp_reduction": 4.5,
+        "timeline_months": 9,
+        "net_thermal_improvement": "High"
+      },
+      "lessons_learned": "Facade greening works best on commercial buildings with good maintenance resources. Plaza retrofits create social spaces while cooling. Breeze lanes must align with prevailing winds and building layout. Integration with existing urban fabric is complex but achievable."
+    },
+    {
+      "case_id": "case_010",
+      "metadata": {
+        "location_name": "Sprawling Suburban - Humid Continental",
+        "climate_type": "Humid_Continental",
+        "analysis_period": "July 1-31, 08:00-20:00",
+        "latitude": 40.71,
+        "longitude": -74.01
+      },
+      "building_context": {
+        "avg_height_m": 15,
+        "building_density": "low_medium",
+        "sky_view_factor": 0.7,
+        "vegetation_coverage_pct": 25,
+        "building_type": "residential_commercial",
+        "area_m2": 16000
+      },
+      "initial_vulnerability": {
+        "score": 5.4,
+        "peak_utci_celsius": 42,
+        "mean_utci_celsius": 32,
+        "heat_stress_hours_pct": 20,
+        "drivers": ["surface_temperature", "urban_heat_island", "vegetation_deficit"],
+        "driver_severity": {
+          "surface_temperature": 0.70,
+          "urban_heat_island": 0.62,
+          "vegetation_deficit": 0.58,
+          "poor_ventilation": 0.48
+        }
+      },
+      "interventions_applied": [
+        {
+          "type": "street_tree_planting",
+          "count": 150,
+          "species": ["sugar_maple", "oak"],
+          "avg_mature_height_m": 16,
+          "canopy_spread_m": 12,
+          "implementation_months": 4,
+          "cost_estimate_usd": 180000
+        },
+        {
+          "type": "permeable_parking",
+          "area_m2": 8000,
+          "surface_type": "permeable_asphalt",
+          "albedo": 0.35,
+          "tree_coverage_pct": 20,
+          "implementation_months": 3,
+          "cost_estimate_usd": 160000
+        },
+        {
+          "type": "green_corridors",
+          "linear_length_m": 2000,
+          "width_m": 15,
+          "planting": "mixed_vegetation",
+          "stormwater_function": true,
+          "implementation_months": 6,
+          "cost_estimate_usd": 240000
+        }
+      ],
+      "results": {
+        "temperature_reduction_celsius": 1.6,
+        "peak_utci_reduction": 2.2,
+        "mean_utci_reduction": 1.3,
+        "heat_stress_hours_reduction_pct": 12,
+        "vegetation_increase_pct": 30,
+        "building_surface_temp_reduction": 2.8,
+        "timeline_months": 8,
+        "net_thermal_improvement": "Moderate"
+      },
+      "lessons_learned": "Suburban sprawl requires extensive tree planting for impact. Parking lot retrofits provide dual benefits (cooling + stormwater). Green corridors provide connectivity and ecological benefits. Maintenance over large areas challenging. Community engagement essential for long-term success."
+    },
+    {
+      "case_id": "case_011",
+      "metadata": {
+        "location_name": "High-Rise Office District - Continental Urban",
+        "climate_type": "Continental",
+        "analysis_period": "July 1-31, 08:00-20:00",
+        "latitude": 52.52,
+        "longitude": 13.40
+      },
+      "building_context": {
+        "avg_height_m": 45,
+        "building_density": "very_high",
+        "sky_view_factor": 0.2,
+        "vegetation_coverage_pct": 5,
+        "building_type": "commercial_office",
+        "area_m2": 25000
+      },
+      "initial_vulnerability": {
+        "score": 6.9,
+        "peak_utci_celsius": 46,
+        "mean_utci_celsius": 35,
+        "heat_stress_hours_pct": 32,
+        "drivers": ["urban_heat_island", "surface_temperature", "poor_ventilation"],
+        "driver_severity": {
+          "urban_heat_island": 0.82,
+          "surface_temperature": 0.76,
+          "poor_ventilation": 0.68,
+          "vegetation_deficit": 0.65
+        }
+      },
+      "interventions_applied": [
+        {
+          "type": "cool_roofs",
+          "area_m2": 15000,
+          "albedo": 0.75,
+          "material": "reflective_membrane",
+          "implementation_months": 3,
+          "cost_estimate_usd": 300000
+        },
+        {
+          "type": "vertical_greening",
+          "area_m2": 8000,
+          "coverage_pct": 30,
+          "system_type": "living_facade",
+          "implementation_months": 6,
+          "cost_estimate_usd": 400000
+        },
+        {
+          "type": "urban_plaza",
+          "area_m2": 5000,
+          "water_feature_pct": 15,
+          "tree_canopy_pct": 20,
+          "implementation_months": 5,
+          "cost_estimate_usd": 350000
+        }
+      ],
+      "results": {
+        "temperature_reduction_celsius": 2.4,
+        "peak_utci_reduction": 3.2,
+        "mean_utci_reduction": 2.0,
+        "heat_stress_hours_reduction_pct": 18,
+        "vegetation_increase_pct": 22,
+        "building_surface_temp_reduction": 7.5,
+        "timeline_months": 9,
+        "net_thermal_improvement": "High"
+      },
+      "lessons_learned": "For tall commercial buildings, cool roofs are most cost-effective first intervention. Vertical greening requires commitment to ongoing maintenance but provides dual benefits (cooling + building aesthetics). Urban plazas serve multiple functions (recreation, cooling, stormwater management). High-density districts benefit most from comprehensive multi-intervention approach."
+    },
+    {
+      "case_id": "case_012",
+      "metadata": {
+        "location_name": "Revitalized Waterfront - Subtropical Coastal",
+        "climate_type": "Subtropical",
+        "analysis_period": "August 1-31, 10:00-18:00",
+        "latitude": 25.76,
+        "longitude": -80.19
+      },
+      "building_context": {
+        "avg_height_m": 24,
+        "building_density": "medium",
+        "sky_view_factor": 0.55,
+        "vegetation_coverage_pct": 22,
+        "building_type": "mixed_resort",
+        "area_m2": 11000,
+        "proximity_to_water": "waterfront"
+      },
+      "initial_vulnerability": {
+        "score": 6.4,
+        "peak_utci_celsius": 51,
+        "mean_utci_celsius": 41,
+        "heat_stress_hours_pct": 42,
+        "drivers": ["surface_temperature", "poor_ventilation", "urban_heat_island"],
+        "driver_severity": {
+          "surface_temperature": 0.84,
+          "poor_ventilation": 0.72,
+          "urban_heat_island": 0.68,
+          "vegetation_deficit": 0.62
+        }
+      },
+      "interventions_applied": [
+        {
+          "type": "blue_spaces",
+          "area_m2": 4500,
+          "water_coverage_pct": 100,
+          "feature_types": ["swimming_pools", "water_channels"],
+          "implementation_months": 4,
+          "cost_estimate_usd": 400000
+        },
+        {
+          "type": "native_coastal_vegetation",
+          "area_m2": 6000,
+          "species": ["mangrove", "sea_grape", "salt_marsh"],
+          "canopy_coverage_pct": 35,
+          "implementation_months": 6,
+          "cost_estimate_usd": 180000
+        },
+        {
+          "type": "light_pavements",
+          "area_m2": 8000,
+          "albedo": 0.70,
+          "material": "permeable_light_concrete",
+          "implementation_months": 2,
+          "cost_estimate_usd": 120000
+        }
+      ],
+      "results": {
+        "temperature_reduction_celsius": 3.1,
+        "peak_utci_reduction": 4.0,
+        "mean_utci_reduction": 2.7,
+        "heat_stress_hours_reduction_pct": 28,
+        "vegetation_increase_pct": 38,
+        "building_surface_temp_reduction": 5.2,
+        "timeline_months": 8,
+        "net_thermal_improvement": "High"
+      },
+      "lessons_learned": "Waterfront locations allow leveraging water bodies for cooling. Native coastal vegetation adapted to salt spray and wind. Blue-green infrastructure provides multiple functions (cooling, stormwater, recreation, biodiversity). Light-colored permeable pavements critical in humid subtropical climates. Water management crucial due to flooding risk."
+    },
+    {
+      "case_id": "case_013",
+      "metadata": {
+        "location_name": "Industrial Mixed-Use Retrofit - Temperate Urban",
+        "climate_type": "Temperate",
+        "analysis_period": "June 15 - August 15, 10:00-18:00",
+        "latitude": 42.36,
+        "longitude": -71.06
+      },
+      "building_context": {
+        "avg_height_m": 28,
+        "building_density": "high",
+        "sky_view_factor": 0.35,
+        "vegetation_coverage_pct": 6,
+        "building_type": "mixed_industrial",
+        "area_m2": 18000
+      },
+      "initial_vulnerability": {
+        "score": 6.7,
+        "peak_utci_celsius": 45,
+        "mean_utci_celsius": 35,
+        "heat_stress_hours_pct": 30,
+        "drivers": ["surface_temperature", "vegetation_deficit", "urban_heat_island"],
+        "driver_severity": {
+          "surface_temperature": 0.80,
+          "vegetation_deficit": 0.75,
+          "urban_heat_island": 0.70,
+          "poor_ventilation": 0.65
+        }
+      },
+      "interventions_applied": [
+        {
+          "type": "extensive_green_roofs",
+          "area_m2": 10000,
+          "coverage_pct": 100,
+          "system_type": "extensive",
+          "vegetation_depth_cm": 12,
+          "implementation_months": 6,
+          "cost_estimate_usd": 350000
+        },
+        {
+          "type": "industrial_site_greening",
+          "area_m2": 7000,
+          "species": ["fast_growing_trees", "native_shrubs"],
+          "tree_count": 120,
+          "implementation_months": 5,
+          "cost_estimate_usd": 200000
+        },
+        {
+          "type": "cool_pavements",
+          "area_m2": 9000,
+          "albedo": 0.60,
+          "material": "light_colored_concrete",
+          "implementation_months": 3,
+          "cost_estimate_usd": 150000
+        }
+      ],
+      "results": {
+        "temperature_reduction_celsius": 2.6,
+        "peak_utci_reduction": 3.3,
+        "mean_utci_reduction": 2.1,
+        "heat_stress_hours_reduction_pct": 20,
+        "vegetation_increase_pct": 32,
+        "building_surface_temp_reduction": 6.0,
+        "timeline_months": 9,
+        "net_thermal_improvement": "High"
+      },
+      "lessons_learned": "Industrial sites often have large roof areas suitable for green roofs. Greening large hardscaped areas requires phased approach. Fast-growing species useful for rapid canopy establishment but require selection for long-term health. Green roofs on industrial buildings must account for structural load and maintenance access. Worker thermal comfort improvements have productivity benefits."
+    },
+    {
+      "case_id": "case_014",
+      "metadata": {
+        "location_name": "Historic Montane District - Alpine Temperate",
+        "climate_type": "Alpine",
+        "analysis_period": "July 15 - August 15, 10:00-18:00",
+        "latitude": 47.27,
+        "longitude": 11.39
+      },
+      "building_context": {
+        "avg_height_m": 16,
+        "building_density": "medium",
+        "sky_view_factor": 0.6,
+        "vegetation_coverage_pct": 35,
+        "building_type": "historic_mixed",
+        "area_m2": 8500
+      },
+      "initial_vulnerability": {
+        "score": 4.2,
+        "peak_utci_celsius": 38,
+        "mean_utci_celsius": 26,
+        "heat_stress_hours_pct": 5,
+        "drivers": ["surface_temperature", "urban_heat_island"],
+        "driver_severity": {
+          "surface_temperature": 0.60,
+          "urban_heat_island": 0.55,
+          "vegetation_deficit": 0.45,
+          "poor_ventilation": 0.35
+        }
+      },
+      "interventions_applied": [
+        {
+          "type": "alpine_tree_planting",
+          "count": 95,
+          "species": ["spruce", "larch"],
+          "avg_mature_height_m": 20,
+          "canopy_coverage_pct": 22,
+          "implementation_months": 5,
+          "cost_estimate_usd": 140000
+        },
+        {
+          "type": "green_terraces",
+          "area_m2": 3000,
+          "green_coverage_pct": 75,
+          "implementation_months": 4,
+          "cost_estimate_usd": 120000
+        },
+        {
+          "type": "water_restoration",
+          "linear_length_m": 400,
+          "width_m": 3,
+          "daylighting_streams": true,
+          "implementation_months": 6,
+          "cost_estimate_usd": 160000
+        }
+      ],
+      "results": {
+        "temperature_reduction_celsius": 0.8,
+        "peak_utci_reduction": 1.2,
+        "mean_utci_reduction": 0.6,
+        "heat_stress_hours_reduction_pct": 2,
+        "vegetation_increase_pct": 28,
+        "building_surface_temp_reduction": 1.5,
+        "timeline_months": 10,
+        "net_thermal_improvement": "Low"
+      },
+      "lessons_learned": "Alpine regions have minimal heat stress but benefit from interventions for aesthetic, ecological, and climate adaptation reasons. Historic preservation constraints require sensitive design. Alpine species adapted to temperature extremes are appropriate choices. Stream restoration provides ecological benefits beyond thermal. Interventions provide co-benefits (hydrology restoration, biodiversity, recreation) even with modest thermal impacts."
+    },
+    {
+      "case_id": "case_015",
+      "metadata": {
+        "location_name": "Smart Retrofitted District - Humid Subtropical Urban",
+        "climate_type": "Humid_Subtropical",
+        "analysis_period": "July 1-31, 09:00-19:00",
+        "latitude": 39.94,
+        "longitude": -81.59
+      },
+      "building_context": {
+        "avg_height_m": 22,
+        "building_density": "high",
+        "sky_view_factor": 0.32,
+        "vegetation_coverage_pct": 14,
+        "building_type": "mixed_development",
+        "area_m2": 12000
+      },
+      "initial_vulnerability": {
+        "score": 6.8,
+        "peak_utci_celsius": 49,
+        "mean_utci_celsius": 39,
+        "heat_stress_hours_pct": 40,
+        "drivers": ["urban_heat_island", "surface_temperature", "vegetation_deficit"],
+        "driver_severity": {
+          "urban_heat_island": 0.78,
+          "surface_temperature": 0.82,
+          "vegetation_deficit": 0.72,
+          "poor_ventilation": 0.62
+        }
+      },
+      "interventions_applied": [
+        {
+          "type": "smart_irrigation_green_walls",
+          "area_m2": 4500,
+          "coverage_pct": 45,
+          "system_type": "modular_automated",
+          "sensor_equipped": true,
+          "implementation_months": 5,
+          "cost_estimate_usd": 280000
+        },
+        {
+          "type": "permeable_smart_pavements",
+          "area_m2": 7000,
+          "albedo": 0.65,
+          "material": "permeable_concrete_with_sensors",
+          "moisture_monitoring": true,
+          "implementation_months": 4,
+          "cost_estimate_usd": 210000
+        },
+        {
+          "type": "intelligent_shade_systems",
+          "area_m2": 3500,
+          "system_type": "automated_pergolas",
+          "control_type": "thermal_responsive",
+          "implementation_months": 3,
+          "cost_estimate_usd": 180000
+        }
+      ],
+      "results": {
+        "temperature_reduction_celsius": 2.7,
+        "peak_utci_reduction": 3.5,
+        "mean_utci_reduction": 2.3,
+        "heat_stress_hours_reduction_pct": 22,
+        "vegetation_increase_pct": 24,
+        "building_surface_temp_reduction": 5.8,
+        "timeline_months": 8,
+        "net_thermal_improvement": "High"
+      },
+      "lessons_learned": "Smart climate responsive systems with real-time monitoring and control optimize thermal benefits. IoT-enabled green infrastructure allows maintenance prediction and water conservation. Automated shading systems provide flexible thermal control while maintaining views and light. Initial investment higher but operational efficiency and long-term benefits justify costs. Data collection supports adaptive management and proves ROI."
+    }
+  ]
+}

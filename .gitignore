@@ -1,0 +1,35 @@
+# Secrets — never commit API keys
+.env
+*.env
+!.env.example
+
+# Dependencies
+node_modules/
+backend/venv/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+
+# Build output
+frontend/dist/
+
+# Runtime artifacts
+backend/cache/
+backend/*.log
+backend/debug_coordinates.txt
+backend/data/uploads/
+
+# Copyrighted research PDFs (RAG corpus) — keep local only
+backend/data/documents/
+backend/data/documents_index.json
+
+# Archived unused files
+_archive_unused/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

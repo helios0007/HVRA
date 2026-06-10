@@ -1,0 +1,317 @@
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import mapboxgl from 'mapbox-gl';
+import { MapboxOverlay } from '@deck.gl/mapbox';
+import { GeoJsonLayer, PolygonLayer } from '@deck.gl/layers';
+import { booleanPointInPolygon, centroid as turfCentroid } from '@turf/turf';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import FactorBreakdown from './FactorBreakdown';
+import { getHVIColorRGB, getHVIColorHex, riskLabel, HVI_GRADIENT_CSS } from '../utils/hviColors';
+
+function buildingsToGeoJSON(buildingData) {
+  if (!buildingData?.features || !Array.isArray(buildingData.features)) {
+    return { type: 'FeatureCollection', features: [] };
+  }
+  return buildingData;
+}
+
+export default function MapboxDeckView({ buildingData, hviData, zoneBounds }) {
+  const mapContainer = useRef(null);
+  const map = useRef(null);
+  const overlay = useRef(null);
+  const [styleReady, setStyleReady] = useState(false);
+
+  // View controls
+  const [heightScale, setHeightScale] = useState(1);   // 1x = true building heights
+  const [opacity, setOpacity] = useState(95);
+  const [hviFilter, setHviFilter] = useState(0);
+  const [wireframe, setWireframe] = useState(false);
+  // OFF by default: colors must match the absolute HVI scale used everywhere
+  const [relativeColors, setRelativeColors] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+
+  // Interaction state
+  const [hovered, setHovered] = useState(null);   // { x, y, properties }
+  const [selected, setSelected] = useState(null); // feature properties
+
+  useEffect(() => {
+    if (!mapContainer.current) return;
+
+    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
+
+    map.current = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: 'mapbox://styles/mapbox/dark-v11', // minimal dark basemap for street context
+
+      center: [
+        parseFloat(import.meta.env.VITE_MAP_CENTER_LNG),
+        parseFloat(import.meta.env.VITE_MAP_CENTER_LAT),
+      ],
+      zoom: parseFloat(import.meta.env.VITE_MAP_ZOOM),
+      pitch: 50,
+      bearing: -15,
+      antialias: true,
+    });
+
+    map.current.on('load', () => {
+      overlay.current = new MapboxOverlay({ interleaved: true, layers: [] });
+      map.current.addControl(overlay.current);
+      map.current.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'top-left');
+      setStyleReady(true);
+    });
+
+    return () => {
+      if (map.current) map.current.remove();
+    };
+  }, []);
+
+  // Fit view to zone when data arrives
+  useEffect(() => {
+    if (!map.current || !styleReady || !zoneBounds?.coordinates) return;
+    try {
+      const ring = zoneBounds.coordinates[0];
+      const lngs = ring.map((c) => c[0]);
+      const lats = ring.map((c) => c[1]);
+      map.current.fitBounds(
+        [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+        { padding: 80, pitch: 50, bearing: -15, duration: 1200 }
+      );
+    } catch (e) { /* keep default view */ }
+  }, [zoneBounds, styleReady]);
+
+  const resetCamera = useCallback((pitch, bearing) => {
+    if (!map.current || !zoneBounds?.coordinates) return;
+    const ring = zoneBounds.coordinates[0];
+    const lngs = ring.map((c) => c[0]);
+    const lats = ring.map((c) => c[1]);
+    map.current.fitBounds(
+      [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+      { padding: 80, pitch, bearing, duration: 900 }
+    );
+  }, [zoneBounds]);
+
+  // Zone score range — shared by the color stretch, tooltip, and legend
+  const scoreRange = useMemo(() => {
+    const feats = (hviData?.buildings_with_hvi || buildingData)?.features || [];
+    if (!feats.length) return [0, 10];
+    const scores = feats.map((f) => f.properties.hvi_score ?? f.properties.vulnerability_score ?? 5);
+    return [Math.min(...scores), Math.max(...scores)];
+  }, [hviData, buildingData]);
+
+  // The ONE place that decides a building's display color. Tooltip and
+  // inspector use this too, so what you hover always matches what you see.
+  const displayScore = useCallback((score) => {
+    if (relativeColors && scoreRange[1] - scoreRange[0] >= 0.1) {
+      return ((score - scoreRange[0]) / (scoreRange[1] - scoreRange[0])) * 10;
+    }
+    return score;
+  }, [relativeColors, scoreRange]);
+
+  // Update deck.gl layers when data or controls change
+  useEffect(() => {
+    if (!overlay.current || !map.current || !styleReady) return;
+
+    const layers = [];
+    const buildingsToRender = hviData?.buildings_with_hvi || buildingData;
+
+    if (buildingsToRender) {
+      const buildingGeoJSON = buildingsToGeoJSON(buildingsToRender);
+
+      // Keep only buildings inside the drawn zone
+      let inZone = buildingGeoJSON.features;
+      if (zoneBounds) {
+        const zoneFeature = { type: 'Feature', geometry: zoneBounds, properties: {} };
+        inZone = inZone.filter((f) => {
+          try {
+            return booleanPointInPolygon(turfCentroid(f), zoneFeature);
+          } catch (e) {
+            return true;
+          }
+        });
+      }
+
+      const filtered = inZone.filter((d) => {
+        const score = d.properties.hvi_score ?? d.properties.vulnerability_score ?? 5.0;
+        return score >= hviFilter;
+      });
+
+      const colorFor = (score) => getHVIColorRGB(displayScore(score));
+
+      layers.push(
+        new GeoJsonLayer({
+          id: 'buildings-layer',
+          data: { type: 'FeatureCollection', features: filtered },
+          pickable: true,
+          extruded: true,
+          wireframe,
+          filled: true,
+          stroked: false,
+          getElevation: (f) => (f.properties.height || 15) * heightScale,
+          getFillColor: (f) => {
+            const score = f.properties.hvi_score ?? f.properties.vulnerability_score ?? 5.0;
+            return [...colorFor(score), Math.round(opacity * 2.55)];
+          },
+          getLineColor: [10, 14, 20, 160],
+          lineWidthMinPixels: 1,
+          material: {
+            ambient: 0.45,
+            diffuse: 0.7,
+            shininess: 28,
+            specularColor: [60, 64, 70],
+          },
+          onHover: (info) => {
+            if (info.object) {
+              setHovered({ x: info.x, y: info.y, properties: info.object.properties });
+            } else {
+              setHovered(null);
+            }
+          },
+          onClick: (info) => {
+            if (info.object) setSelected(info.object.properties);
+          },
+          updateTriggers: {
+            getElevation: [heightScale],
+            getFillColor: [opacity, relativeColors, hviFilter, scoreRange],
+          },
+        })
+      );
+    }
+
+    if (zoneBounds) {
+      layers.push(
+        new PolygonLayer({
+          id: 'zone-boundary',
+          data: [{ type: 'Feature', geometry: zoneBounds, properties: {} }],
+          pickable: false,
+          extruded: false,
+          wireframe: true,
+          getPolygon: (d) => d.geometry.coordinates,
+          getLineColor: [88, 166, 255, 220],
+          lineWidthMinPixels: 2,
+          filled: false,
+        })
+      );
+    }
+
+    overlay.current.setProps({ layers });
+  }, [buildingData, hviData, zoneBounds, styleReady, heightScale, opacity, hviFilter, wireframe, relativeColors, displayScore]);
+
+  const hp = hovered?.properties;
+  const hScore = hp ? (hp.hvi_score ?? hp.vulnerability_score ?? 5.0) : null;
+
+  return (
+    <div className="deck-view">
+      <div ref={mapContainer} className="deck-canvas" />
+
+      {/* Hover tooltip — swatch color always matches the rendered building */}
+      {hovered && (
+        <div className="deck-tooltip" style={{ left: hovered.x + 14, top: hovered.y + 14 }}>
+          <div className="deck-tooltip-score" style={{ color: getHVIColorHex(displayScore(hScore)) }}>
+            HVI {hScore.toFixed(1)} · {riskLabel(hScore)}
+          </div>
+          <div className="deck-tooltip-row">Height: {(hp.height || 0).toFixed(0)} m</div>
+          {hp.hvi_factors?.construction_era && (
+            <div className="deck-tooltip-row">Era score: {hp.hvi_factors.construction_era.score.toFixed(2)}</div>
+          )}
+          {relativeColors && (
+            <div className="deck-tooltip-row" style={{ fontStyle: 'italic' }}>
+              Color stretched to zone range
+            </div>
+          )}
+          <div className="deck-tooltip-hint">Click for full breakdown</div>
+        </div>
+      )}
+
+      {/* View controls */}
+      <div className={`deck-controls ${showControls ? '' : 'collapsed'}`}>
+        <button className="deck-controls-toggle" onClick={() => setShowControls(!showControls)}>
+          {showControls ? '⚙ View controls ▾' : '⚙ ▸'}
+        </button>
+        {showControls && (
+          <div className="deck-controls-body">
+            <label className="ctl">
+              <span className="ctl-label">Height scale <em>{heightScale}× {heightScale === 1 ? '(true)' : ''}</em></span>
+              <input type="range" min="1" max="10" step="1" value={heightScale}
+                onChange={(e) => setHeightScale(Number(e.target.value))} />
+            </label>
+            <label className="ctl">
+              <span className="ctl-label">Building opacity <em>{opacity}%</em></span>
+              <input type="range" min="20" max="100" step="5" value={opacity}
+                onChange={(e) => setOpacity(Number(e.target.value))} />
+            </label>
+            <label className="ctl">
+              <span className="ctl-label">Show HVI ≥ <em>{hviFilter.toFixed(1)}</em></span>
+              <input type="range" min="0" max="9" step="0.5" value={hviFilter}
+                onChange={(e) => setHviFilter(Number(e.target.value))} />
+            </label>
+            <label className="ctl ctl-check">
+              <input type="checkbox" checked={relativeColors} onChange={(e) => setRelativeColors(e.target.checked)} />
+              <span>Stretch colors to zone range</span>
+            </label>
+            <label className="ctl ctl-check">
+              <input type="checkbox" checked={wireframe} onChange={(e) => setWireframe(e.target.checked)} />
+              <span>Wireframe edges</span>
+            </label>
+            <div className="ctl-buttons">
+              <button onClick={() => resetCamera(50, -15)}>↻ Reset view</button>
+              <button onClick={() => resetCamera(0, 0)}>⬒ Top-down</button>
+              <button onClick={() => resetCamera(65, 30)}>◰ Street level</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Color legend */}
+      <div className="deck-legend">
+        <span className="deck-legend-title">HVI</span>
+        <div className="deck-legend-gradient-wrap">
+          <div className="deck-legend-gradient" style={{ background: HVI_GRADIENT_CSS }} />
+          <div className="deck-legend-labels">
+            {relativeColors ? (
+              <>
+                <span>{scoreRange[0].toFixed(1)}</span>
+                <span className="deck-legend-mode">zone range</span>
+                <span>{scoreRange[1].toFixed(1)}</span>
+              </>
+            ) : (
+              <>
+                <span>0</span>
+                <span className="deck-legend-mode">absolute</span>
+                <span>10</span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Selected building inspector */}
+      {selected && (
+        <div className="deck-inspector">
+          <div className="deck-inspector-header">
+            <div>
+              <div className="deck-inspector-title">Building inspector</div>
+              <div className="deck-inspector-score" style={{ color: getHVIColorHex(displayScore(selected.hvi_score ?? 5)) }}>
+                HVI {(selected.hvi_score ?? 5).toFixed(1)} / 10 · {riskLabel(selected.hvi_score ?? 5)}
+              </div>
+            </div>
+            <button className="deck-inspector-close" onClick={() => setSelected(null)}>×</button>
+          </div>
+          <div className="deck-inspector-meta">
+            <span>Height {(selected.height || 0).toFixed(0)} m</span>
+            {selected.hvi_breakdown && (
+              <>
+                <span>Building {selected.hvi_breakdown.building_exposure.toFixed(1)}</span>
+                <span>Social {selected.hvi_breakdown.social_vulnerability.toFixed(1)}</span>
+                <span>Thermal {selected.hvi_breakdown.thermal_context.toFixed(1)}</span>
+              </>
+            )}
+          </div>
+          {selected.hvi_factors ? (
+            <FactorBreakdown factors={selected.hvi_factors} compact />
+          ) : (
+            <p className="deck-inspector-empty">No factor data for this building.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(curl -s \"https://ovc.catastro.meh.es/INSPIRE/wfsBU.aspx?service=WFS&version=2.0.0&request=GetFeature&typeNames=BU:Building&srsName=EPSG::4326&bbox=41.390,2.150,41.392,2.153,EPSG::4326&count=3\")",
+      "Bash(curl -s \"https://overpass-api.de/api/interpreter\" --data-urlencode 'data=[out:json][timeout:25];\\(way[\"leisure\"~\"park|garden\"]\\(41.385,2.145,41.395,2.160\\);way[\"landuse\"~\"grass|forest\"]\\(41.385,2.145,41.395,2.160\\);node[\"natural\"=\"tree\"]\\(41.389,2.149,41.392,2.153\\);\\);out count;')",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('elements',[]\\), indent=1\\)[:800]\\)\")",
+      "Bash(curl -s \"https://api.idescat.cat/taules/v2/pmh/9548/10494/sec/data?YEAR=2022&SEX=TOTAL&format=json\" -o nul -w \"%{http_code} %{size_download}\\\\n\")",
+      "Bash(curl -s \"https://api.idescat.cat/taules/v2/pmh/9548/10494/sec?format=json\")",
+      "Bash(curl -s --max-time 40 \"https://overpass-api.de/api/interpreter\" --data-urlencode 'data=[out:json][timeout:25];\\(way[\"leisure\"~\"park|garden\"]\\(41.385,2.145,41.395,2.160\\);\\);out count;')",
+      "Bash(curl -s \"https://api.idescat.cat/taules/v2/pmh/9548/10494/sec/data?SEC=0801901001&YEAR=2022&SEX=TOTAL&format=json\")",
+      "Bash(curl -s --max-time 40 -X POST -H \"User-Agent: urban-hvi-tool/1.0\" --data-urlencode data@/tmp/op.ql \"https://overpass-api.de/api/interpreter\")",
+      "Bash(curl -s \"https://api.idescat.cat/taules/v2/pmh/9548/10494/sec/data?format=json&YEAR=2022&SEX=TOTAL&AGE=TOTAL\")",
+      "Bash(curl -s \"https://api.idescat.cat/taules/v2/pmh/9548/10494/sec/data?format=json&YEAR=2022&SEX=TOTAL&SEC=08019301001\")",
+      "Bash(curl -s --max-time 40 -X POST -H \"User-Agent: urban-hvi-tool/1.0\" -d '[out:json][timeout:25];\\(way[\"leisure\"=\"park\"]\\(41.385,2.145,41.395,2.160\\);\\);out count;' \"https://overpass-api.de/api/interpreter\")",
+      "Bash(curl -s \"https://opendata-ajuntament.barcelona.cat/data/api/3/action/package_search?q=seccions+censals&rows=5\")",
+      "Bash(curl -s \"https://opendata-ajuntament.barcelona.cat/data/api/3/action/package_search?q=unitats+administratives&rows=3\")",
+      "Bash(curl -sL \"https://opendata-ajuntament.barcelona.cat/data/api/3/action/package_show?id=20170706-districtes-barris\")",
+      "Bash(mkdir -p \"d:\\\\IAAC\\\\TERM III\\\\RESERACH STUDIO\\\\URBAN SCALE\\\\urban-intervention-tool\\\\backend\\\\data\")",
+      "Bash(curl -sL -o unitats_administratives_bcn.geojson \"https://opendata-ajuntament.barcelona.cat/data/dataset/808daafa-d9ce-48c0-925a-fa5afdb1ed41/resource/cd800462-f326-429f-a67a-c69b7fc4c50a/download\")",
+      "Bash(unzip -o ua.zip)",
+      "Bash(python -c \"import pyproj; print\\('pyproj OK', pyproj.__version__\\)\")",
+      "Bash(curl -s \"https://api.idescat.cat/taules/v2/censph/304/20780?format=json\")",
+      "Bash(curl -sL \"https://opendata-ajuntament.barcelona.cat/data/api/3/action/package_show?id=renda-disponible-llars-bcn\")",
+      "Bash(curl -s http://localhost:8000/api/hvi/hvi_factors)",
+      "Bash(python -c \"import rasterio; print\\('rasterio', rasterio.__version__\\)\")",
+      "Bash(python -c \"import numpy; print\\('numpy OK'\\)\")"
+    ]
+  }
+}
