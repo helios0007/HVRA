@@ -6,6 +6,7 @@ import { booleanPointInPolygon, centroid as turfCentroid } from '@turf/turf';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import FactorBreakdown from './FactorBreakdown';
 import { getHVIColorRGB, getHVIColorHex, riskLabel, HVI_GRADIENT_CSS } from '../utils/hviColors';
+import { rankInterventionsForBuilding } from '../utils/interventionEngine';
 
 function buildingsToGeoJSON(buildingData) {
   if (!buildingData?.features || !Array.isArray(buildingData.features)) {
@@ -306,7 +307,25 @@ export default function MapboxDeckView({ buildingData, hviData, zoneBounds }) {
             )}
           </div>
           {selected.hvi_factors ? (
-            <FactorBreakdown factors={selected.hvi_factors} compact />
+            <>
+              {/* Top recommended interventions for THIS building */}
+              {(() => {
+                const recs = rankInterventionsForBuilding(selected.hvi_factors, 3);
+                return recs.length > 0 && (
+                  <div className="deck-recs">
+                    <div className="deck-recs-title">Recommended interventions</div>
+                    {recs.map(({ intervention, deltaHVI }) => (
+                      <div className="deck-rec" key={intervention.id}>
+                        <span className="deck-rec-icon">{intervention.icon}</span>
+                        <span className="deck-rec-name">{intervention.name}</span>
+                        <span className="deck-rec-delta">−{deltaHVI.toFixed(1)} HVI</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              <FactorBreakdown factors={selected.hvi_factors} compact />
+            </>
           ) : (
             <p className="deck-inspector-empty">No factor data for this building.</p>
           )}

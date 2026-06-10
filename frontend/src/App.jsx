@@ -4,6 +4,11 @@ import MapboxDeckView from './components/MapboxDeckView';
 import HVI2DMap from './components/HVI2DMap';
 import FactorBreakdown from './components/FactorBreakdown';
 import { getHVIColorHex, riskLabel } from './utils/hviColors';
+import {
+  applyInterventionsToZone,
+  summarizeZoneImpact,
+  rankInterventionsForZone,
+} from './utils/interventionEngine';
 import './App.css';
 
 // Explanations and recommended interventions per vulnerability driver
@@ -158,6 +163,50 @@ export default function App() {
   const [loadingStep, setLoadingStep] = useState(0);
   const [analysisError, setAnalysisError] = useState('');
   const [hviData, setHviData] = useState(null);
+  const [activeInterventions, setActiveInterventions] = useState([]);
+
+  const toggleIntervention = (id) => {
+    setActiveInterventions((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  // Ranked catalog: zone-wide impact of each intervention alone
+  const zoneRanking = useMemo(
+    () => rankInterventionsForZone(hviData?.buildings_with_hvi),
+    [hviData]
+  );
+
+  // What-if dataset: buildings recolored with active interventions applied
+  const whatIfData = useMemo(() => {
+    if (!hviData || !activeInterventions.length) return null;
+    const modified = applyInterventionsToZone(hviData.buildings_with_hvi, activeInterventions);
+    const scores = modified.features
+      .map((f) => f.properties?.hvi_score)
+      .filter((s) => s !== undefined);
+    const mean = scores.reduce((a, b) => a + b, 0) / (scores.length || 1);
+    return {
+      ...hviData,
+      buildings_with_hvi: modified,
+      hvi_statistics: {
+        ...hviData.hvi_statistics,
+        mean_hvi: Math.round(mean * 10) / 10,
+        min_hvi: Math.min(...scores),
+        max_hvi: Math.max(...scores),
+        high_vulnerability: scores.filter((s) => s >= 7).length,
+        medium_vulnerability: scores.filter((s) => s >= 4 && s < 7).length,
+        low_vulnerability: scores.filter((s) => s < 4).length,
+      },
+    };
+  }, [hviData, activeInterventions]);
+
+  const whatIfSummary = useMemo(
+    () =>
+      activeInterventions.length
+        ? summarizeZoneImpact(hviData?.buildings_with_hvi, activeInterventions)
+        : null,
+    [hviData, activeInterventions]
+  );
 
   // Mean of each factor across all buildings, for the zone-level methodology panel
   const zoneFactors = useMemo(() => {
@@ -294,6 +343,9 @@ export default function App() {
         </button>
         <button className={`tab ${activeTab === 'results' ? 'active' : ''}`} onClick={() => setActiveTab('results')} disabled={!selectedZone}>
           <span className="tab-icon">🌡️</span> Heatmap &amp; Drivers
+        </button>
+        <button className={`tab ${activeTab === 'interventions' ? 'active' : ''}`} onClick={() => setActiveTab('interventions')} disabled={!hviData}>
+          <span className="tab-icon">💡</span> Interventions
         </button>
       </div>
 
@@ -554,6 +606,106 @@ export default function App() {
             </div>
           );
         })()}
+
+        {/* Tab 5: Interventions — what-if design studio */}
+        {activeTab === 'interventions' && hviData && (
+          <div className="tab-panel">
+            <div className="panel-main">
+              <MapboxDeckView
+                buildingData={selectedZone?.vulnerability_analysis?.buildings_3d}
+                hviData={whatIfData || hviData}
+                zoneBounds={selectedZone?.zone_geojson}
+              />
+            </div>
+            <div className="panel-side">
+              <div className="panel-content">
+                <h3>Design interventions</h3>
+                <p>Toggle measures to see the zone recolor with the projected HVI. Effects use published cooling coefficients.</p>
+
+                {/* Before / after summary */}
+                {whatIfSummary ? (
+                  <div className="whatif-summary">
+                    <div className="whatif-col">
+                      <span className="whatif-label">Before</span>
+                      <span className="whatif-value" style={{ color: getHVIColorHex(whatIfSummary.meanBefore) }}>
+                        {whatIfSummary.meanBefore.toFixed(1)}
+                      </span>
+                    </div>
+                    <span className="whatif-arrow">→</span>
+                    <div className="whatif-col">
+                      <span className="whatif-label">After</span>
+                      <span className="whatif-value" style={{ color: getHVIColorHex(whatIfSummary.meanAfter) }}>
+                        {whatIfSummary.meanAfter.toFixed(1)}
+                      </span>
+                    </div>
+                    <div className="whatif-col whatif-delta">
+                      <span className="whatif-label">Zone HVI</span>
+                      <span className="whatif-value" style={{ color: '#34d399' }}>
+                        −{whatIfSummary.delta.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="whatif-summary empty">
+                    Select interventions below to simulate their combined effect.
+                  </div>
+                )}
+
+                {/* Ranked intervention cards */}
+                {zoneRanking.map(({ intervention: iv, affected, meanZoneDelta }) => {
+                  const active = activeInterventions.includes(iv.id);
+                  return (
+                    <div
+                      key={iv.id}
+                      className={`iv-card ${active ? 'active' : ''}`}
+                      onClick={() => toggleIntervention(iv.id)}
+                    >
+                      <div className="iv-card-head">
+                        <span className="iv-icon">{iv.icon}</span>
+                        <div className="iv-title-wrap">
+                          <span className="iv-title">{iv.name}</span>
+                          <span className="iv-category">{iv.category}</span>
+                        </div>
+                        <label className="iv-switch" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={active}
+                            onChange={() => toggleIntervention(iv.id)}
+                          />
+                          <span className="iv-slider" />
+                        </label>
+                      </div>
+                      <p className="iv-desc">{iv.description}</p>
+                      <div className="iv-stats">
+                        <span className="iv-stat impact">−{meanZoneDelta.toFixed(2)} zone HVI</span>
+                        <span className="iv-stat">{affected} buildings</span>
+                        <span className="iv-stat">{iv.cost.level}</span>
+                        <span className="iv-stat">{iv.timeframe}</span>
+                      </div>
+                      <div className="iv-evidence" title={iv.evidence}>
+                        📚 {iv.evidence}
+                        {' '}
+                        <a href={iv.source} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                          source
+                        </a>
+                      </div>
+                      <div className="iv-benefits">
+                        {iv.coBenefits.map((b) => (
+                          <span className="driver-action-chip" key={b}>{b}</span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div className="tip-box">
+                  💡 Cards are ranked by projected zone-wide HVI reduction. Each intervention only
+                  applies to buildings where it makes sense (e.g. cool roofs only on risky roofs).
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
