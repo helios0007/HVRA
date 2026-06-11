@@ -11,6 +11,23 @@ const FAINT = '#999';
 const BLUE = '#2563eb';
 const GREEN = '#16a34a';
 
+// Scalloped canopy outline (plan symbol for a tree crown)
+function crownPath(cx, cy, r) {
+  const bumps = 9;
+  let d = '';
+  for (let i = 0; i <= bumps; i++) {
+    const a0 = (i / bumps) * Math.PI * 2 - Math.PI / 2;
+    const x = cx + Math.cos(a0) * r;
+    const y = cy + Math.sin(a0) * r;
+    if (i === 0) d = `M${x.toFixed(1)},${y.toFixed(1)}`;
+    else {
+      const am = ((i - 0.5) / bumps) * Math.PI * 2 - Math.PI / 2;
+      d += ` Q${(cx + Math.cos(am) * r * 1.22).toFixed(1)},${(cy + Math.sin(am) * r * 1.22).toFixed(1)} ${x.toFixed(1)},${y.toFixed(1)}`;
+    }
+  }
+  return d + 'Z';
+}
+
 const PlanDrawing = forwardRef(function PlanDrawing(
   { plan, orientation = 'NS', position = 0.5, activeNames = [] },
   ref
@@ -21,7 +38,7 @@ const PlanDrawing = forwardRef(function PlanDrawing(
   const PAD = 46;
   const maxH = 640;
   const scale = Math.min((W - PAD * 2) / plan.widthM, (maxH - PAD * 2) / plan.heightM);
-  const H = plan.heightM * scale + PAD * 2 + 26;
+  const H = plan.heightM * scale + PAD * 2 + 40;
 
   // metres → px, with north up (flip y)
   const X = (m) => PAD + m * scale;
@@ -114,10 +131,16 @@ const PlanDrawing = forwardRef(function PlanDrawing(
         </g>
       )}
 
-      {/* street trees: crown circles at true scale */}
+      {/* street trees: scalloped canopies at true scale, shadow to the NE
+          (sun from the SW in the afternoon) */}
       {plan.trees.map(([tx, ty], i) => (
         <g key={i}>
-          <circle cx={X(tx)} cy={Y(ty)} r={2.5 * scale} fill="#2563eb12" stroke={BLUE} strokeWidth="1" />
+          <path
+            d={crownPath(X(tx) + 1.1 * scale, Y(ty) - 1.1 * scale, 2.4 * scale)}
+            fill="#00000010"
+            stroke="none"
+          />
+          <path d={crownPath(X(tx), Y(ty), 2.5 * scale)} fill="#2563eb12" stroke={BLUE} strokeWidth="1" />
           <circle cx={X(tx)} cy={Y(ty)} r="1.2" fill={BLUE} />
         </g>
       ))}
@@ -146,7 +169,7 @@ const PlanDrawing = forwardRef(function PlanDrawing(
       </g>
 
       {/* scale bar */}
-      <g transform={`translate(${W - PAD - 50 * scale}, ${H - 18})`} fontSize="8.5" fill={INK}>
+      <g transform={`translate(${W - PAD - 50 * scale}, ${H - 34})`} fontSize="8.5" fill={INK}>
         <line x1="0" y1="-4" x2={50 * scale} y2="-4" stroke={INK} strokeWidth="1.2" />
         <line x1="0" y1="-8" x2="0" y2="0" stroke={INK} strokeWidth="1.2" />
         <line x1={25 * scale} y1="-7" x2={25 * scale} y2="-1" stroke={INK} strokeWidth="1" />
@@ -154,11 +177,18 @@ const PlanDrawing = forwardRef(function PlanDrawing(
         <text x={25 * scale} y="8" textAnchor="middle">50 m</text>
       </g>
 
-      {/* title + legend */}
-      <text x={PAD} y={H - 10} fontSize="9" fill={FAINT}>
-        INTERVENTION PLAN · cut A–A′ = climatic section · dots = building HVI ·
+      {/* title block */}
+      <line x1={PAD - 8} y1={H - 26} x2={W - PAD + 8} y2={H - 26} stroke={INK} strokeWidth="0.8" />
+      <text x={PAD} y={H - 15} fontSize="9.5" fontWeight="700" fill={INK}>
+        INTERVENTION PLAN · cut A–A′ = climatic section
+      </text>
+      <text x={PAD} y={H - 5} fontSize="8" fill={FAINT}>
+        cadastral footprints · dots = building HVI ·
         {plan.trees.length ? ` ${plan.trees.length} trees placed geometrically (3–11 m from facades, 9 m spacing) ·` : ''}
         {activeNames.length ? ` ${activeNames.join(' + ')}` : ' no interventions selected'}
+      </text>
+      <text x={W - PAD} y={H - 15} fontSize="8.5" fill={INK} textAnchor="end">
+        HVRA · roof plan · north up
       </text>
     </svg>
   );

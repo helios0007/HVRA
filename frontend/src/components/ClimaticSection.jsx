@@ -1,18 +1,27 @@
-// The climatic section — a minimal data drawing.
-// Every line is computed: building chords from real footprints, shadows from
-// the real solar position, and a surface-temperature curve from Landsat LST
-// bent by the selected interventions. Proposed design elements (trees, sails,
-// green roofs, de-paved surfaces) are drawn as section symbols at true scale —
-// proposals in blue/green, existing fabric in ink.
+// The climatic section — a data drawing in architectural drafting convention.
+//
+// Cut convention: walls and slabs cut by the section plane are drawn as solid
+// poché; faces beyond are light, with era-typical facade articulation
+// (Catastro construction year → tall windows + balconies for pre-1980 stock,
+// band windows for modern, storefront ground floors). LOD1 geometry: the
+// articulation is typological, not surveyed — stated in the title block.
+//
+// Everything climatic is computed: shadows from the real solar position, the
+// surface-temperature curve from Landsat LST bent by the selected
+// interventions. Proposals in blue/green, existing fabric in ink.
 
 import { forwardRef } from 'react';
 import { getHVIColorHex } from '../utils/hviColors';
 
 const INK = '#1a1a1a';
+const POCHE = '#2e2e2a';
 const FAINT = '#999';
 const RED = '#d43d2a';
 const BLUE = '#2563eb';
 const GREEN = '#16a34a';
+
+const WALL_M = 0.35; // cut wall thickness
+const SLAB_M = 0.3; // cut slab thickness
 
 function tempPath(curve, xScale, tToY, x0) {
   let d = '';
@@ -29,28 +38,38 @@ function tempPath(curve, xScale, tToY, x0) {
   return d;
 }
 
-// ---- design element symbols (true scale: mY = px per metre) ----
+// Scalloped crown outline — section tree
+function crownPath(cx, cy, r) {
+  const bumps = 9;
+  let d = '';
+  for (let i = 0; i <= bumps; i++) {
+    const a0 = (i / bumps) * Math.PI * 2 - Math.PI / 2;
+    const x = cx + Math.cos(a0) * r;
+    const y = cy + Math.sin(a0) * r;
+    if (i === 0) d = `M${x.toFixed(1)},${y.toFixed(1)}`;
+    else {
+      const am = ((i - 0.5) / bumps) * Math.PI * 2 - Math.PI / 2;
+      const qx = cx + Math.cos(am) * r * 1.22;
+      const qy = cy + Math.sin(am) * r * 1.22;
+      d += ` Q${qx.toFixed(1)},${qy.toFixed(1)} ${x.toFixed(1)},${y.toFixed(1)}`;
+    }
+  }
+  return d + 'Z';
+}
 
-// Section tree: trunk + branching + clustered crown
 function Tree({ x, groundY, mY, crownH, crownR }) {
-  const ty = groundY - crownH * mY; // crown base
   const r = crownR * mY;
-  const cy = ty - r * 0.55;
+  const cy = groundY - (crownH + crownR * 0.7) * mY;
   return (
     <g stroke={BLUE} fill="none" strokeWidth="1.1">
-      <line x1={x} y1={groundY} x2={x} y2={ty + r * 0.2} strokeWidth="1.6" />
-      <line x1={x} y1={ty + r * 0.4} x2={x - r * 0.45} y2={ty - r * 0.15} />
-      <line x1={x} y1={ty + r * 0.3} x2={x + r * 0.5} y2={ty - r * 0.1} />
-      <g fill="#2563eb14">
-        <circle cx={x - r * 0.45} cy={cy} r={r * 0.62} />
-        <circle cx={x + r * 0.45} cy={cy + r * 0.08} r={r * 0.62} />
-        <circle cx={x} cy={cy - r * 0.42} r={r * 0.66} />
-      </g>
+      <line x1={x} y1={groundY} x2={x} y2={cy + r * 0.5} strokeWidth="1.6" />
+      <line x1={x} y1={cy + r * 0.6} x2={x - r * 0.4} y2={cy + r * 0.15} />
+      <line x1={x} y1={cy + r * 0.5} x2={x + r * 0.45} y2={cy + r * 0.1} />
+      <path d={crownPath(x, cy, r)} fill="#2563eb12" />
     </g>
   );
 }
 
-// Tensile shade sail: two posts + catenary canvas
 function ShadeSail({ x0, x1, groundY, mY, h }) {
   const y = groundY - h * mY;
   const midX = (x0 + x1) / 2;
@@ -65,23 +84,23 @@ function ShadeSail({ x0, x1, groundY, mY, h }) {
   );
 }
 
-// Scale figure, 1.7 m
+// Scale figure, 1.7 m, walking
 function Person({ x, groundY, mY }) {
   const h = 1.7 * mY;
-  const headR = h * 0.14;
+  const headR = h * 0.13;
   const y0 = groundY - h;
   return (
-    <g stroke={INK} fill="none" strokeWidth="1">
-      <circle cx={x} cy={y0 + headR} r={headR} />
-      <line x1={x} y1={y0 + headR * 2} x2={x} y2={groundY - h * 0.32} />
-      <line x1={x} y1={groundY - h * 0.32} x2={x - h * 0.16} y2={groundY} />
-      <line x1={x} y1={groundY - h * 0.32} x2={x + h * 0.16} y2={groundY} />
-      <line x1={x - h * 0.18} y1={y0 + h * 0.42} x2={x + h * 0.18} y2={y0 + h * 0.38} />
+    <g stroke={INK} fill={INK} strokeWidth="1" strokeLinecap="round">
+      <circle cx={x} cy={y0 + headR} r={headR} fill="none" />
+      <line x1={x} y1={y0 + headR * 2.1} x2={x - h * 0.04} y2={groundY - h * 0.38} />
+      <line x1={x - h * 0.04} y1={groundY - h * 0.38} x2={x - h * 0.2} y2={groundY} fill="none" />
+      <line x1={x - h * 0.04} y1={groundY - h * 0.38} x2={x + h * 0.14} y2={groundY - h * 0.16} fill="none" />
+      <line x1={x + h * 0.14} y1={groundY - h * 0.16} x2={x + h * 0.1} y2={groundY} fill="none" />
+      <line x1={x - h * 0.16} y1={y0 + h * 0.42} x2={x + h * 0.2} y2={y0 + h * 0.36} fill="none" />
     </g>
   );
 }
 
-// Vegetation tufts (green roof / de-paved planting)
 function Tufts({ x0, x1, y, color, step = 8, size = 4 }) {
   const items = [];
   for (let x = x0 + step / 2; x < x1; x += step) {
@@ -98,7 +117,6 @@ function Tufts({ x0, x1, y, color, step = 8, size = 4 }) {
   return <g>{items}</g>;
 }
 
-// Reflection arrows off a cool roof (albedo, drawn physics)
 function ReflectArrows({ x0, x1, y }) {
   const items = [];
   const n = Math.max(2, Math.floor((x1 - x0) / 36));
@@ -114,10 +132,8 @@ function ReflectArrows({ x0, x1, y }) {
   return <g>{items}</g>;
 }
 
-// Night re-radiation: wavy arrows rising from the street. Arrow height encodes
-// how freely stored heat escapes — deep canyons (high H/W) trap it.
 function NightRadiation({ x0, x1, groundY, hw }) {
-  const escape = Math.max(0.25, 1 - Math.min(hw, 2) / 2.4); // 0..1
+  const escape = Math.max(0.25, 1 - Math.min(hw, 2) / 2.4);
   const h = 14 + escape * 26;
   const items = [];
   const n = Math.max(2, Math.floor((x1 - x0) / 30));
@@ -133,7 +149,6 @@ function NightRadiation({ x0, x1, groundY, hw }) {
   return <g>{items}</g>;
 }
 
-// Climbing vegetation on a facade
 function FacadeVine({ x, y0, y1 }) {
   const h = y1 - y0;
   const n = Math.max(3, Math.floor(h / 14));
@@ -155,37 +170,190 @@ function FacadeVine({ x, y0, y1 }) {
   );
 }
 
+// Oblique dimension ticks (drafting convention)
+function DimLine({ x0, x1, y, label }) {
+  return (
+    <g stroke={INK} strokeWidth="0.8" fontSize="8.5">
+      <line x1={x0} y1={y} x2={x1} y2={y} />
+      <line x1={x0} y1={y - 6} x2={x0} y2={y + 3} strokeWidth="0.7" />
+      <line x1={x1} y1={y - 6} x2={x1} y2={y + 3} strokeWidth="0.7" />
+      <line x1={x0 - 2.5} y1={y + 2.5} x2={x0 + 2.5} y2={y - 2.5} strokeWidth="1" />
+      <line x1={x1 - 2.5} y1={y + 2.5} x2={x1 + 2.5} y2={y - 2.5} strokeWidth="1" />
+      <text x={(x0 + x1) / 2} y={y - 3} textAnchor="middle" stroke="none" fill={INK}>
+        {label}
+      </text>
+    </g>
+  );
+}
+
+// Cut building: poché walls/slabs, era-typical facade beyond
+function Building({ p, x, w, h, groundY, mY, xScale, sunnyRight, night }) {
+  const roofY = groundY - h;
+  const wallPx = Math.max(WALL_M * xScale, 1.4);
+  const slabPx = Math.max(SLAB_M * mY, 1.1);
+  const detailed = mY >= 1.0 && w > 26;
+
+  const eraScore = p.factors?.construction_era?.score ?? 0.5;
+  const old = p.year ? p.year < 1980 : eraScore >= 0.55;
+
+  // storey levels (m): taller ground floor when the building allows it
+  const gf = p.height >= 7.5 ? 3.8 : 3.0;
+  const levels = [];
+  let lv = gf;
+  while (lv < p.height - 1.6) {
+    levels.push(lv);
+    lv += 3.0;
+  }
+
+  const inner = [x + wallPx, x + w - wallPx];
+  const Ym = (m) => groundY - m * mY;
+
+  return (
+    <g>
+      {/* face beyond */}
+      <rect x={x} y={roofY} width={w} height={h} fill="#fdfdfb" />
+
+      {detailed && (
+        <g>
+          {/* storefront ground floor */}
+          <rect
+            x={inner[0] + 0.4 * xScale}
+            y={Ym(gf - 0.9)}
+            width={inner[1] - inner[0] - 0.8 * xScale}
+            height={(gf - 1.3) * mY}
+            fill="#eef0ee"
+            stroke="#b9b9b1"
+            strokeWidth="0.6"
+          />
+          {(() => {
+            const mullions = [];
+            for (let mx = inner[0] + 2.5 * xScale; mx < inner[1] - 1 * xScale; mx += 2.5 * xScale) {
+              mullions.push(
+                <line key={mx} x1={mx} y1={Ym(gf - 0.9)} x2={mx} y2={Ym(0.4)} stroke="#b9b9b1" strokeWidth="0.6" />
+              );
+            }
+            return mullions;
+          })()}
+
+          {/* upper storeys: era-typical openings */}
+          {levels.map((lvl, k) => {
+            const cells = [];
+            if (old) {
+              // tall window + balcony rhythm (Eixample type)
+              for (let wx = inner[0] + 1.2 * xScale; wx + 1.2 * xScale < inner[1] - 0.8 * xScale; wx += 3.0 * xScale) {
+                cells.push(
+                  <rect
+                    key={wx}
+                    x={wx}
+                    y={Ym(lvl + 3.0 - 0.7)}
+                    width={1.2 * xScale}
+                    height={2.1 * mY}
+                    fill="#ecedea"
+                    stroke="#a8a8a0"
+                    strokeWidth="0.6"
+                  />
+                );
+              }
+            } else {
+              // modern band window
+              cells.push(
+                <rect
+                  key="band"
+                  x={inner[0] + 1.0 * xScale}
+                  y={Ym(lvl + 2.5)}
+                  width={inner[1] - inner[0] - 2.0 * xScale}
+                  height={1.5 * mY}
+                  fill="#ecedea"
+                  stroke="#a8a8a0"
+                  strokeWidth="0.6"
+                />
+              );
+            }
+            return <g key={k}>{cells}</g>;
+          })}
+
+          {/* balconies on the cut facades (old stock) */}
+          {old &&
+            levels.map((lvl, k) => (
+              <g key={`b${k}`} stroke={INK} strokeWidth="0.8" fill={POCHE}>
+                {[x, x + w].map((fx, side) => {
+                  const dir = side === 0 ? -1 : 1;
+                  const bw = 0.5 * xScale * dir;
+                  return (
+                    <g key={side}>
+                      <rect
+                        x={Math.min(fx, fx + bw)}
+                        y={Ym(lvl) - Math.max(0.18 * mY, 1)}
+                        width={Math.abs(bw)}
+                        height={Math.max(0.18 * mY, 1)}
+                      />
+                      <line x1={fx + bw} y1={Ym(lvl)} x2={fx + bw} y2={Ym(lvl + 1.0)} fill="none" />
+                      <line x1={fx} y1={Ym(lvl + 1.0)} x2={fx + bw} y2={Ym(lvl + 1.0)} fill="none" />
+                    </g>
+                  );
+                })}
+              </g>
+            ))}
+
+          {/* cornice on old stock */}
+          {old && (
+            <g stroke={INK} strokeWidth="1">
+              <line x1={x - 0.35 * xScale} y1={Ym(p.height - 0.5)} x2={x + w + 0.35 * xScale} y2={Ym(p.height - 0.5)} />
+            </g>
+          )}
+        </g>
+      )}
+
+      {/* simple storey lines when too small for detail */}
+      {!detailed &&
+        levels.map((lvl, k) => (
+          <line key={k} x1={x + 1} y1={Ym(lvl)} x2={x + w - 1} y2={Ym(lvl)} stroke="#dddcd5" strokeWidth="0.7" />
+        ))}
+
+      {/* cut poché: walls + slabs */}
+      <g fill={POCHE} stroke="none">
+        <rect x={x} y={roofY} width={wallPx} height={h} />
+        <rect x={x + w - wallPx} y={roofY} width={wallPx} height={h} />
+        <rect x={x} y={roofY} width={w} height={slabPx} />
+        {levels.map((lvl, k) => (
+          <rect key={k} x={x} y={Ym(lvl)} width={w} height={slabPx} />
+        ))}
+      </g>
+
+      {/* heavy cut outline */}
+      <rect x={x} y={roofY} width={w} height={h} fill="none" stroke={INK} strokeWidth="1.9" />
+    </g>
+  );
+}
+
 const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNames = [] }, ref) {
   if (!section) {
     return <div className="diagram-empty">No buildings intersect this cut — move the position slider.</div>;
   }
 
   const W = 1060;
-  const PAD = 50;
+  const PAD = 56;
   const drawW = W - PAD * 2;
   const xScale = drawW / section.length;
 
-  // True proportions unless the cut is very long relative to building heights
   const vx = section.length / section.maxHeight > 18 ? 2 : 1;
-  const mY = xScale * vx; // px per metre, vertical
+  const mY = xScale * vx;
 
-  const groundY = 30 + section.maxHeight * mY + 56; // sun band above
+  const groundY = 30 + section.maxHeight * mY + 56;
   const sunBandTop = 16;
 
-  // Temperature strip below ground
   const isNight = section.sun?.night;
-  const stripTop = groundY + 40;
+  const stripTop = groundY + 52;
   const stripH = 78;
   const tMax = isNight ? section.zoneLstC - 2 : section.zoneLstC + 6;
   const tMin = isNight ? section.zoneLstC - 20 : Math.min(28, section.zoneLstC - 16);
   const tToY = (t) => stripTop + stripH - ((t - tMin) / (tMax - tMin)) * stripH;
-  const H = stripTop + stripH + 46;
+  const H = stripTop + stripH + 76;
 
   const X = (m) => PAD + m * xScale;
   const sun = section.sun;
   const surface = section.surface || {};
 
-  // Sun glyph position: on the side the sun comes from
   const sunX = sun.shadowDir > 0 ? PAD + 30 : W - PAD - 30;
   const sunY = sunBandTop + 14;
   const tallest = section.profiles.reduce((a, b) => (b.height > a.height ? b : a));
@@ -245,7 +413,7 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
         </>
       )}
 
-      {/* ---- night: re-radiation arrows, height = how freely heat escapes ---- */}
+      {/* ---- night: re-radiation arrows ---- */}
       {sun.night &&
         section.gaps.map((g, i) => (
           <NightRadiation key={i} x0={X(g.x0)} x1={X(g.x1)} groundY={groundY} hw={g.hw} />
@@ -277,13 +445,22 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
           return (
             <g key={i}>
               <rect x={x0} y={groundY} width={x1 - x0} height={4} fill="#2563eb1c" />
-              <ReflectArrows x0={x0} x1={x1} y={groundY} />
+              {!isNight && <ReflectArrows x0={x0} x1={x1} y={groundY} />}
             </g>
           );
         }
-        // existing asphalt
         return <rect key={i} x={x0} y={groundY} width={x1 - x0} height={4} fill="#1a1a1a" opacity="0.35" />;
       })}
+
+      {/* ---- sidewalk + curb marks (2 m from each facade) ---- */}
+      {section.gaps.filter((g) => g.width >= 6).map((g, i) => (
+        <g key={i} stroke={INK} strokeWidth="0.7">
+          <line x1={X(g.x0)} y1={groundY - 1.2} x2={X(g.x0 + 2)} y2={groundY - 1.2} />
+          <line x1={X(g.x0 + 2)} y1={groundY - 1.2} x2={X(g.x0 + 2)} y2={groundY} />
+          <line x1={X(g.x1 - 2)} y1={groundY - 1.2} x2={X(g.x1)} y2={groundY - 1.2} />
+          <line x1={X(g.x1 - 2)} y1={groundY - 1.2} x2={X(g.x1 - 2)} y2={groundY} />
+        </g>
+      ))}
 
       {/* ---- proposed shade sails ---- */}
       {section.shadePatches.map((s, i) => (
@@ -295,52 +472,26 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
         <Tree key={i} x={X(t.x)} groundY={groundY} mY={mY} crownH={t.crownH} crownR={t.crownR} />
       ))}
 
-      {/* ---- building profiles + roof/facade design elements ---- */}
+      {/* ---- building profiles in cut convention ---- */}
       {section.profiles.map((p, i) => {
         const x = X(p.x0);
         const w = (p.x1 - p.x0) * xScale;
         const h = p.height * mY;
         const roofY = groundY - h;
-        const sunnyX = sun.shadowDir > 0 ? x + w : x; // facade facing the sun
-        const floors = Math.max(1, Math.round(p.height / 3));
-        const drawOpenings = mY >= 1.05 && w > 20;
+        const sunnyX = sun.shadowDir > 0 ? x + w : x;
         return (
           <g key={i}>
-            <rect x={x} y={roofY} width={w} height={h} fill="#fff" stroke={INK} strokeWidth="1.4" />
-
-            {/* floor slabs + window grid (3 m storeys) */}
-            {[...Array(Math.max(floors - 1, 0))].map((_, k) => (
-              <line
-                key={`f${k}`}
-                x1={x + 1}
-                y1={groundY - (k + 1) * 3 * mY}
-                x2={x + w - 1}
-                y2={groundY - (k + 1) * 3 * mY}
-                stroke="#e2e2dc"
-                strokeWidth="0.7"
-              />
-            ))}
-            {drawOpenings &&
-              [...Array(floors)].map((_, k) => {
-                const wy = groundY - (k * 3 + 2.3) * mY;
-                const wh = 1.4 * mY;
-                const cells = [];
-                for (let wx = x + 2.5 * xScale; wx + 1.3 * xScale < x + w - 1.5 * xScale; wx += 3.4 * xScale) {
-                  cells.push(
-                    <rect
-                      key={wx}
-                      x={wx}
-                      y={wy}
-                      width={1.3 * xScale}
-                      height={wh}
-                      fill="#f1f1ec"
-                      stroke="#cfcfc7"
-                      strokeWidth="0.6"
-                    />
-                  );
-                }
-                return <g key={`w${k}`}>{cells}</g>;
-              })}
+            <Building
+              p={p}
+              x={x}
+              w={w}
+              h={h}
+              groundY={groundY}
+              mY={mY}
+              xScale={xScale}
+              sunnyRight={sun.shadowDir > 0}
+              night={isNight}
+            />
 
             {/* envelope retrofit: insulation as inner dashed offset */}
             {section.envelopeRetrofit && (
@@ -360,7 +511,7 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
             {hasCoolRoof && !hasGreenRoof && (
               <g>
                 <line x1={x} y1={roofY - 1.5} x2={x + w} y2={roofY - 1.5} stroke={BLUE} strokeWidth="3" opacity="0.85" />
-                <ReflectArrows x0={x} x1={x + w} y={roofY - 4} />
+                {!isNight && <ReflectArrows x0={x} x1={x + w} y={roofY - 4} />}
               </g>
             )}
 
@@ -376,21 +527,40 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
               </g>
             )}
 
-            {/* HVI dot + height */}
-            {w > 24 && (
-              <>
-                <circle cx={x + w / 2 - 14} cy={roofY - 24} r="3.5" fill={getHVIColorHex(p.hvi ?? 5)} />
-                <text x={x + w / 2 - 7} y={roofY - 21} fontSize="9" fill={INK}>
-                  {(p.hvi ?? 0).toFixed(1)}
+            {/* HVI dot · height · year above the roof */}
+            {w > 30 && (
+              <g>
+                <circle cx={x + 6} cy={roofY - 26} r="3.5" fill={getHVIColorHex(p.hvi ?? 5)} />
+                <text x={x + 13} y={roofY - 23} fontSize="9" fill={INK}>
+                  HVI {(p.hvi ?? 0).toFixed(1)} · {p.height.toFixed(0)}m{p.year ? ` · ${p.year}` : ''}
                 </text>
-                <text x={x + w / 2} y={groundY - h / 2 + 3} fontSize="8.5" fill={FAINT} textAnchor="middle">
-                  {p.height.toFixed(0)}m{p.year ? ` · ${p.year}` : ''}
-                </text>
-              </>
+              </g>
             )}
           </g>
         );
       })}
+
+      {/* ---- level markers on the tallest building ---- */}
+      {(() => {
+        const x = X(tallest.x0);
+        const roofY = groundY - tallest.height * mY;
+        return (
+          <g fontSize="8.5" fill={INK} stroke="none">
+            {[[groundY, '±0.00'], [roofY, `+${tallest.height.toFixed(2)}`]].map(([y, lbl]) => (
+              <g key={lbl}>
+                <polygon
+                  points={`${x - 14},${y - 5} ${x - 9},${y} ${x - 19},${y}`}
+                  fill="none"
+                  stroke={INK}
+                  strokeWidth="0.8"
+                />
+                <line x1={x - 9} y1={y} x2={x - 2} y2={y} stroke={INK} strokeWidth="0.8" />
+                <text x={x - 14} y={y - 8} textAnchor="middle">{lbl}</text>
+              </g>
+            ))}
+          </g>
+        );
+      })()}
 
       {/* ---- scale figures ---- */}
       {(section.people || []).map((p, i) => (
@@ -409,21 +579,22 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
       </g>
 
       {/* ---- ground line ---- */}
-      <line x1={PAD - 10} y1={groundY} x2={W - PAD + 10} y2={groundY} stroke={INK} strokeWidth="1.8" />
+      <line x1={PAD - 10} y1={groundY} x2={W - PAD + 10} y2={groundY} stroke={INK} strokeWidth="2.2" />
 
-      {/* ---- orientation labels at the section ends ---- */}
-      <text x={PAD - 24} y={groundY + 5} fontSize="11" fontWeight="700" fill={INK}>
+      {/* ---- orientation labels ---- */}
+      <text x={PAD - 30} y={groundY + 5} fontSize="11" fontWeight="700" fill={INK}>
         {section.orientation === 'NS' ? 'S' : 'W'}
       </text>
-      <text x={W - PAD + 16} y={groundY + 5} fontSize="11" fontWeight="700" fill={INK}>
+      <text x={W - PAD + 18} y={groundY + 5} fontSize="11" fontWeight="700" fill={INK}>
         {section.orientation === 'NS' ? 'N' : 'E'}
       </text>
 
-      {/* ---- canyon H/W annotations ---- */}
+      {/* ---- street dimension lines (drafting ticks) + H/W ---- */}
       {section.gaps.filter((g) => g.width > 6).map((g, i) => (
-        <g key={i} fill={FAINT} fontSize="8.5" textAnchor="middle">
-          <text x={X((g.x0 + g.x1) / 2)} y={groundY + 16}>
-            {g.width.toFixed(0)}m · H/W {g.hw.toFixed(1)}
+        <g key={i}>
+          <DimLine x0={X(g.x0)} x1={X(g.x1)} y={groundY + 24} label={`${g.width.toFixed(1)} m`} />
+          <text x={X((g.x0 + g.x1) / 2)} y={groundY + 36} fontSize="8" fill={FAINT} textAnchor="middle">
+            H/W {g.hw.toFixed(1)}
           </text>
         </g>
       ))}
@@ -455,8 +626,8 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
           <text x="23" y="0" fill={INK}>{isNight ? 'modelled night (before)' : 'measured (before)'}</text>
           {section.curveAfter && (
             <>
-              <line x1="130" y1="-3" x2="148" y2="-3" stroke={BLUE} strokeWidth="1.6" />
-              <text x="153" y="0" fill={INK}>
+              <line x1="160" y1="-3" x2="178" y2="-3" stroke={BLUE} strokeWidth="1.6" />
+              <text x="183" y="0" fill={INK}>
                 with interventions: {activeNames.join(' + ') || '—'}
               </text>
             </>
@@ -464,18 +635,26 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
         </g>
       </g>
 
-      {/* ---- scale bar + vertical exaggeration note ---- */}
-      <g transform={`translate(${W - PAD - 20 * xScale}, ${H - 14})`} fontSize="8.5" fill={INK}>
+      {/* ---- scale bar ---- */}
+      <g transform={`translate(${W - PAD - 20 * xScale}, ${H - 40})`} fontSize="8.5" fill={INK}>
         <line x1="0" y1="-4" x2={20 * xScale} y2="-4" stroke={INK} strokeWidth="1.2" />
         <line x1="0" y1="-8" x2="0" y2="0" stroke={INK} strokeWidth="1.2" />
+        <line x1={10 * xScale} y1="-7" x2={10 * xScale} y2="-1" stroke={INK} strokeWidth="1" />
         <line x1={20 * xScale} y1="-8" x2={20 * xScale} y2="0" stroke={INK} strokeWidth="1.2" />
         <text x={10 * xScale} y="8" textAnchor="middle">20 m{vx > 1 ? ` · vert ×${vx}` : ''}</text>
       </g>
 
-      {/* ---- title ---- */}
-      <text x={PAD} y={H - 10} fontSize="9" fill={FAINT}>
-        SECTION {section.orientation === 'NS' ? 'S–N' : 'W–E'} · {section.length.toFixed(0)} m ·
-        proposed elements in blue/green · shadows cast at computed solar geometry · LOD1 heights
+      {/* ---- title block ---- */}
+      <line x1={PAD - 10} y1={H - 30} x2={W - PAD + 10} y2={H - 30} stroke={INK} strokeWidth="0.8" />
+      <text x={PAD} y={H - 18} fontSize="9.5" fontWeight="700" fill={INK}>
+        CLIMATIC SECTION A–A′ ({section.orientation === 'NS' ? 'S–N' : 'W–E'}) · {section.length.toFixed(0)} m
+      </text>
+      <text x={PAD} y={H - 7} fontSize="8" fill={FAINT}>
+        cut convention: walls/slabs in poché · facade articulation typological by construction era (Catastro) ·
+        LOD1 cadastral heights · shadows at computed solar geometry · proposals in blue/green
+      </text>
+      <text x={W - PAD} y={H - 18} fontSize="8.5" fill={INK} textAnchor="end">
+        HVRA · {isNight ? 'night' : `${sun.solarHour}:00 solar`} · 21 Jun
       </text>
     </svg>
   );
