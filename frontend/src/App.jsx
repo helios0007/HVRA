@@ -3,6 +3,7 @@ import MapView from './components/MapView';
 import MapboxDeckView from './components/MapboxDeckView';
 import HVI2DMap from './components/HVI2DMap';
 import FactorBreakdown from './components/FactorBreakdown';
+import DiagramSheet from './components/DiagramSheet';
 import { getHVIColorHex, riskLabel } from './utils/hviColors';
 import {
   applyInterventionsToZone,
@@ -164,6 +165,7 @@ export default function App() {
   const [analysisError, setAnalysisError] = useState('');
   const [hviData, setHviData] = useState(null);
   const [activeInterventions, setActiveInterventions] = useState([]);
+  const [showDiagrams, setShowDiagrams] = useState(false);
 
   const toggleIntervention = (id) => {
     setActiveInterventions((prev) =>
@@ -651,6 +653,16 @@ export default function App() {
                   </div>
                 )}
 
+                {/* Finalize → generated climatic diagrams */}
+                <button
+                  className="diagram-generate"
+                  disabled={!activeInterventions.length}
+                  title={activeInterventions.length ? 'Generate section, waterfall and fingerprint diagrams' : 'Select at least one intervention first'}
+                  onClick={() => setShowDiagrams(true)}
+                >
+                  📐 Generate climatic diagrams
+                </button>
+
                 {/* Ranked intervention cards */}
                 {zoneRanking.map(({ intervention: iv, affected, meanZoneDelta }) => {
                   const active = activeInterventions.includes(iv.id);
@@ -707,6 +719,17 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* Generated diagram sheet overlay */}
+      {showDiagrams && hviData && (
+        <DiagramSheet
+          buildings={hviData.buildings_with_hvi}
+          whatIfBuildings={whatIfData?.buildings_with_hvi || hviData.buildings_with_hvi}
+          activeIds={activeInterventions}
+          zoneFactors={zoneFactors}
+          onClose={() => setShowDiagrams(false)}
+        />
+      )}
     </div>
   );
 }
