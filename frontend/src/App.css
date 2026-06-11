@@ -1339,3 +1339,19 @@ body {
   color: #64748b;
 }
 .formula-cite a { color: #93c5fd; }
+
+/* UTCI heatmap legend — stacked above the HVI legend */
+.deck-heatlegend {
+  position: absolute;
+  bottom: 86px;
+  left: 14px;
+  z-index: 1100;
+  background-color: rgba(17, 22, 31, 0.92);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}

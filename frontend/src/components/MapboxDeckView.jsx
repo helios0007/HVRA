@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { MapboxOverlay } from '@deck.gl/mapbox';
-import { GeoJsonLayer, PolygonLayer } from '@deck.gl/layers';
+import { GeoJsonLayer, PolygonLayer, BitmapLayer } from '@deck.gl/layers';
 import { booleanPointInPolygon, centroid as turfCentroid } from '@turf/turf';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import FactorBreakdown from './FactorBreakdown';
@@ -15,7 +15,7 @@ function buildingsToGeoJSON(buildingData) {
   return buildingData;
 }
 
-export default function MapboxDeckView({ buildingData, hviData, zoneBounds }) {
+export default function MapboxDeckView({ buildingData, hviData, zoneBounds, heatmap }) {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const overlay = useRef(null);
@@ -29,6 +29,9 @@ export default function MapboxDeckView({ buildingData, hviData, zoneBounds }) {
   // OFF by default: colors must match the absolute HVI scale used everywhere
   const [relativeColors, setRelativeColors] = useState(false);
   const [showControls, setShowControls] = useState(true);
+  // UTCI heatmap underlay (when the parent provides one)
+  const [showHeatmap, setShowHeatmap] = useState(true);
+  const [heatOpacity, setHeatOpacity] = useState(55);
 
   // Interaction state
   const [hovered, setHovered] = useState(null);   // { x, y, properties }
@@ -112,6 +115,21 @@ export default function MapboxDeckView({ buildingData, hviData, zoneBounds }) {
     if (!overlay.current || !map.current || !styleReady) return;
 
     const layers = [];
+
+    // UTCI heatmap underlay — sits on the ground beneath the 3D buildings
+    if (heatmap?.url && heatmap?.bounds && showHeatmap) {
+      const b = heatmap.bounds;
+      layers.push(
+        new BitmapLayer({
+          id: 'utci-heatmap',
+          image: heatmap.url,
+          bounds: [b.west, b.south, b.east, b.north],
+          opacity: heatOpacity / 100,
+          pickable: false,
+        })
+      );
+    }
+
     const buildingsToRender = hviData?.buildings_with_hvi || buildingData;
 
     if (buildingsToRender) {
@@ -194,7 +212,7 @@ export default function MapboxDeckView({ buildingData, hviData, zoneBounds }) {
     }
 
     overlay.current.setProps({ layers });
-  }, [buildingData, hviData, zoneBounds, styleReady, heightScale, opacity, hviFilter, wireframe, relativeColors, displayScore]);
+  }, [buildingData, hviData, zoneBounds, styleReady, heightScale, opacity, hviFilter, wireframe, relativeColors, displayScore, heatmap, showHeatmap, heatOpacity]);
 
   const hp = hovered?.properties;
   const hScore = hp ? (hp.hvi_score ?? hp.vulnerability_score ?? 5.0) : null;
@@ -252,6 +270,21 @@ export default function MapboxDeckView({ buildingData, hviData, zoneBounds }) {
               <input type="checkbox" checked={wireframe} onChange={(e) => setWireframe(e.target.checked)} />
               <span>Wireframe edges</span>
             </label>
+            {heatmap?.url && (
+              <>
+                <label className="ctl ctl-check">
+                  <input type="checkbox" checked={showHeatmap} onChange={(e) => setShowHeatmap(e.target.checked)} />
+                  <span>🌡 UTCI heatmap underlay</span>
+                </label>
+                {showHeatmap && (
+                  <label className="ctl">
+                    <span className="ctl-label">Heatmap opacity <em>{heatOpacity}%</em></span>
+                    <input type="range" min="15" max="100" step="5" value={heatOpacity}
+                      onChange={(e) => setHeatOpacity(Number(e.target.value))} />
+                  </label>
+                )}
+              </>
+            )}
             <div className="ctl-buttons">
               <button onClick={() => resetCamera(50, -15)}>↻ Reset view</button>
               <button onClick={() => resetCamera(0, 0)}>⬒ Top-down</button>
@@ -260,6 +293,24 @@ export default function MapboxDeckView({ buildingData, hviData, zoneBounds }) {
           </div>
         )}
       </div>
+
+      {/* Heatmap scale (when the underlay is on) */}
+      {heatmap?.url && showHeatmap && (
+        <div className="deck-heatlegend">
+          <span className="deck-legend-title">🌡</span>
+          <div className="deck-legend-gradient-wrap">
+            <div
+              className="deck-legend-gradient"
+              style={{ background: 'linear-gradient(90deg,#0033cc,#0099ff,#ffffff,#ff6600,#cc0000)' }}
+            />
+            <div className="deck-legend-labels">
+              <span>{heatmap.min?.toFixed(0) ?? ''}</span>
+              <span className="deck-legend-mode">{heatmap.label || 'UTCI °C'}</span>
+              <span>{heatmap.max?.toFixed(0) ?? ''}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Color legend */}
       <div className="deck-legend">

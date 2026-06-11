@@ -17,6 +17,7 @@ import {
   summarizeZoneImpact,
   rankInterventionsForZone,
 } from './utils/interventionEngine';
+import { computeWhatIfHeatmap } from './utils/heatmapWhatIf';
 import './App.css';
 
 // Explanations and recommended interventions per vulnerability driver
@@ -323,6 +324,33 @@ export default function App() {
     return mean;
   }, [hviData]);
 
+  // UTCI heatmap underlay for the 3D views (from the step-1 simulation)
+  const simGrid = selectedZone?.vulnerability_analysis?.simulation_grid;
+  const baseHeatmap = useMemo(() => {
+    if (!simGrid?.heatmap_image || !simGrid?.bounds) return null;
+    return {
+      url: simGrid.heatmap_image,
+      bounds: simGrid.bounds,
+      min: simGrid.min_value,
+      max: simGrid.max_value,
+      label: simGrid.unit || 'UTCI °C',
+    };
+  }, [simGrid]);
+
+  // Heatmap re-rendered with the active interventions' cooling deltas,
+  // on the SAME color scale so before/after compare directly
+  const whatIfHeatmap = useMemo(() => {
+    if (!baseHeatmap) return null;
+    if (!activeInterventions.length) return baseHeatmap;
+    const url = computeWhatIfHeatmap(simGrid, hviData?.buildings_with_hvi, activeInterventions);
+    if (!url) return baseHeatmap; // no raw grid (older analysis) — show original
+    return {
+      ...baseHeatmap,
+      url,
+      label: `${simGrid.unit || 'UTCI °C'} · with interventions`,
+    };
+  }, [baseHeatmap, simGrid, hviData, activeInterventions]);
+
   const handleZoneDrawn = async ({ feature, center }) => {
     setLoading(true);
     setLoadingStep(0);
@@ -524,6 +552,7 @@ export default function App() {
                 buildingData={selectedZone.vulnerability_analysis?.buildings_3d}
                 hviData={hviData}
                 zoneBounds={selectedZone.zone_geojson}
+                heatmap={baseHeatmap}
               />
             </div>
             <div className="panel-side">
@@ -732,6 +761,7 @@ export default function App() {
                 buildingData={selectedZone?.vulnerability_analysis?.buildings_3d}
                 hviData={whatIfData || hviData}
                 zoneBounds={selectedZone?.zone_geojson}
+                heatmap={whatIfHeatmap}
               />
             </div>
             <div className="panel-side">

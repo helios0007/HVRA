@@ -321,6 +321,9 @@ async def analyze_zone_vulnerability(zone_geojson: Dict, center: List[float]) ->
             "min_value": float(grid_min),
             "max_value": float(grid_max),
             "unit": "°C UTCI" if utci_grid is not None else "°C LST",
+            # Raw grid (row 0 = south) so the frontend can re-render the
+            # heatmap with intervention deltas applied, on the same scale
+            "values": _grid_to_values(utci_grid) if utci_grid is not None else None,
         },
         "buildings_3d": buildings_threejs,
     }
@@ -601,6 +604,17 @@ def _extract_bounds(bounds) -> Dict:
         }
 
     raise ValueError(f"Cannot parse bounds: {bounds}")
+
+
+def _grid_to_values(grid: np.ndarray, max_side: int = 140):
+    """Downsample the UTCI grid to a JSON-friendly 2D list (row 0 = south).
+    NaN cells (outside the simulation footprint) become None."""
+    step = max(1, int(np.ceil(max(grid.shape) / max_side)))
+    g = grid[::step, ::step]
+    return [
+        [None if np.isnan(v) else round(float(v), 2) for v in row]
+        for row in g
+    ]
 
 
 def _grid_to_heatmap_png(grid: np.ndarray, min_val: float, max_val: float) -> str:
