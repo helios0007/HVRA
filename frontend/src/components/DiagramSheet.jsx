@@ -4,8 +4,10 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { buildSection } from '../utils/sectionGenerator';
+import { buildPlan } from '../utils/planGenerator';
 import { INTERVENTION_CATALOG } from '../data/interventionCatalog.js';
 import ClimaticSection from './ClimaticSection';
+import PlanDrawing from './PlanDrawing';
 import HVIWaterfall from './HVIWaterfall';
 import FactorFingerprint from './FactorFingerprint';
 
@@ -46,12 +48,13 @@ const HOURS = [
   { label: '🌙 Night', value: 'night' },
 ];
 
-export default function DiagramSheet({ buildings, whatIfBuildings, activeIds, zoneFactors, onClose }) {
+export default function DiagramSheet({ buildings, whatIfBuildings, activeIds, zoneFactors, zoneBounds, onClose }) {
   const [orientation, setOrientation] = useState('NS');
   const [position, setPosition] = useState(0.5);
   const [solarHour, setSolarHour] = useState(15);
 
   const sectionRef = useRef(null);
+  const planRef = useRef(null);
   const waterfallRef = useRef(null);
   const fingerprintRef = useRef(null);
 
@@ -61,6 +64,11 @@ export default function DiagramSheet({ buildings, whatIfBuildings, activeIds, zo
   const section = useMemo(
     () => buildSection(buildings, { orientation, position, solarHour, activeIds, zoneLstC }),
     [buildings, orientation, position, solarHour, activeIds, zoneLstC]
+  );
+
+  const plan = useMemo(
+    () => buildPlan(buildings, zoneBounds, activeIds),
+    [buildings, zoneBounds, activeIds]
   );
 
   const activeNames = useMemo(
@@ -126,7 +134,24 @@ export default function DiagramSheet({ buildings, whatIfBuildings, activeIds, zo
           <ClimaticSection ref={sectionRef} section={section} activeNames={activeNames} />
         </div>
 
-        {/* 2 — waterfall */}
+        {/* 2 — intervention plan */}
+        <div className="diagram-card">
+          <div className="diagram-card-head">
+            <h3>Intervention plan</h3>
+            <button className="diagram-dl" onClick={() => downloadSVG(planRef.current, 'intervention-plan.svg')}>
+              ⬇ SVG
+            </button>
+          </div>
+          <PlanDrawing
+            ref={planRef}
+            plan={plan}
+            orientation={orientation}
+            position={position}
+            activeNames={activeNames}
+          />
+        </div>
+
+        {/* 3 — waterfall */}
         {activeIds.length > 0 && (
           <div className="diagram-card">
             <div className="diagram-card-head">

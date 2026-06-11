@@ -302,9 +302,45 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
         const h = p.height * mY;
         const roofY = groundY - h;
         const sunnyX = sun.shadowDir > 0 ? x + w : x; // facade facing the sun
+        const floors = Math.max(1, Math.round(p.height / 3));
+        const drawOpenings = mY >= 1.05 && w > 20;
         return (
           <g key={i}>
             <rect x={x} y={roofY} width={w} height={h} fill="#fff" stroke={INK} strokeWidth="1.4" />
+
+            {/* floor slabs + window grid (3 m storeys) */}
+            {[...Array(Math.max(floors - 1, 0))].map((_, k) => (
+              <line
+                key={`f${k}`}
+                x1={x + 1}
+                y1={groundY - (k + 1) * 3 * mY}
+                x2={x + w - 1}
+                y2={groundY - (k + 1) * 3 * mY}
+                stroke="#e2e2dc"
+                strokeWidth="0.7"
+              />
+            ))}
+            {drawOpenings &&
+              [...Array(floors)].map((_, k) => {
+                const wy = groundY - (k * 3 + 2.3) * mY;
+                const wh = 1.4 * mY;
+                const cells = [];
+                for (let wx = x + 2.5 * xScale; wx + 1.3 * xScale < x + w - 1.5 * xScale; wx += 3.4 * xScale) {
+                  cells.push(
+                    <rect
+                      key={wx}
+                      x={wx}
+                      y={wy}
+                      width={1.3 * xScale}
+                      height={wh}
+                      fill="#f1f1ec"
+                      stroke="#cfcfc7"
+                      strokeWidth="0.6"
+                    />
+                  );
+                }
+                return <g key={`w${k}`}>{cells}</g>;
+              })}
 
             {/* envelope retrofit: insulation as inner dashed offset */}
             {section.envelopeRetrofit && (
@@ -361,8 +397,27 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
         <Person key={i} x={X(p.x)} groundY={groundY} mY={mY} />
       ))}
 
+      {/* ---- earth hatch below grade ---- */}
+      <g stroke="#c9c9c2" strokeWidth="0.7">
+        {(() => {
+          const lines = [];
+          for (let hx = PAD - 10; hx < W - PAD + 10; hx += 7) {
+            lines.push(<line key={hx} x1={hx} y1={groundY + 5} x2={hx - 6} y2={groundY + 13} />);
+          }
+          return lines;
+        })()}
+      </g>
+
       {/* ---- ground line ---- */}
       <line x1={PAD - 10} y1={groundY} x2={W - PAD + 10} y2={groundY} stroke={INK} strokeWidth="1.8" />
+
+      {/* ---- orientation labels at the section ends ---- */}
+      <text x={PAD - 24} y={groundY + 5} fontSize="11" fontWeight="700" fill={INK}>
+        {section.orientation === 'NS' ? 'S' : 'W'}
+      </text>
+      <text x={W - PAD + 16} y={groundY + 5} fontSize="11" fontWeight="700" fill={INK}>
+        {section.orientation === 'NS' ? 'N' : 'E'}
+      </text>
 
       {/* ---- canyon H/W annotations ---- */}
       {section.gaps.filter((g) => g.width > 6).map((g, i) => (

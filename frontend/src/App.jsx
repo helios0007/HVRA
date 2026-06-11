@@ -849,6 +849,7 @@ export default function App() {
           whatIfBuildings={whatIfData?.buildings_with_hvi || hviData.buildings_with_hvi}
           activeIds={activeInterventions}
           zoneFactors={zoneFactors}
+          zoneBounds={selectedZone?.zone_geojson}
           onClose={() => setShowDiagrams(false)}
         />
       )}
