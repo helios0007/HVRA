@@ -236,7 +236,36 @@ export function buildSection(buildings, opts) {
   if (has('green_roof')) roofTags.push({ id: 'green_roof', label: 'green roof' });
   const facadeTag = has('facade_greening') || has('envelope_retrofit');
 
+  // Scale figures (1.7 m) — one in the widest gap, one under the first tree/shade
+  const people = [];
+  if (gaps.length) {
+    const widest = gaps.reduce((a, b) => (b.width > a.width ? b : a));
+    people.push({ x: (widest.x0 + widest.x1) / 2 + 1.5 });
+  }
+  if (trees.length) people.push({ x: trees[0].x + 2.2 });
+  else if (shadePatches.length) people.push({ x: (shadePatches[0].x0 + shadePatches[0].x1) / 2 });
+
+  // Climate shelter: tag the most vulnerable building on the cut
+  let shelterIdx = null;
+  if (has('climate_shelter') && profiles.length) {
+    let best = -1;
+    profiles.forEach((p, i) => {
+      if ((p.hvi ?? 0) > best) {
+        best = p.hvi ?? 0;
+        shelterIdx = i;
+      }
+    });
+  }
+
   return {
+    surface: {
+      depave: has('depave_planting'),
+      coolPavement: has('cool_pavement'),
+    },
+    people,
+    shelterIdx,
+    envelopeRetrofit: has('envelope_retrofit'),
+    facadeGreening: has('facade_greening'),
     length,
     orientation,
     bearing,
