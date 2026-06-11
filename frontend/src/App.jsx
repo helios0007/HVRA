@@ -4,7 +4,14 @@ import MapboxDeckView from './components/MapboxDeckView';
 import HVI2DMap from './components/HVI2DMap';
 import FactorBreakdown from './components/FactorBreakdown';
 import DiagramSheet from './components/DiagramSheet';
-import { getHVIColorHex, riskLabel } from './utils/hviColors';
+import {
+  getHVIColorHex,
+  riskLabel,
+  riskTier,
+  HVI_TIERS,
+  SAFE_THRESHOLD,
+  BUILDING_GATE,
+} from './utils/hviColors';
 import {
   applyInterventionsToZone,
   summarizeZoneImpact,
@@ -129,6 +136,89 @@ function StatGrid({ stats }) {
         <span className="stat-cell-label">Min HVI</span>
       </div>
     </div>
+  );
+}
+
+// Risk-tier legend: what each band means and what action it calls for
+function HVIScaleLegend({ score }) {
+  return (
+    <div className="hvi-scale-legend">
+      <h4>
+        HVI risk thresholds <span className="section-hint">(index 0–10)</span>
+      </h4>
+      {HVI_TIERS.map((t) => {
+        const active = score !== undefined && score >= t.min && score < t.max;
+        return (
+          <div key={t.label} className={`hvi-tier ${active ? 'active' : ''}`}>
+            <i style={{ backgroundColor: t.color }} />
+            <span className="hvi-tier-range">{t.min.toFixed(1)}–{t.max.toFixed(1)}</span>
+            <span className="hvi-tier-label">{t.label}</span>
+            <span className="hvi-tier-action">{t.action}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Decision gate: is building-level work (Layer 1) needed after urban measures?
+function DecisionGate({ before, after, buildings }) {
+  const score = after ?? before;
+  if (score === undefined || score === null) return null;
+  const highCount = buildings?.features?.filter(
+    (f) => (f.properties?.hvi_score ?? 0) >= BUILDING_GATE
+  ).length ?? 0;
+
+  let cls, icon, verdict, detail;
+  if (score < SAFE_THRESHOLD) {
+    cls = 'safe';
+    icon = '✓';
+    verdict = 'Below intervention threshold';
+    detail = `Zone HVI ${score.toFixed(1)} < ${SAFE_THRESHOLD.toFixed(1)} — urban-scale measures are sufficient. Building-level retrofit not required.`;
+  } else if (score < BUILDING_GATE) {
+    cls = 'moderate';
+    icon = '◐';
+    verdict = 'Street-level measures recommended';
+    detail = `Zone HVI ${score.toFixed(1)} sits in the moderate band (${SAFE_THRESHOLD.toFixed(1)}–${BUILDING_GATE.toFixed(1)}). Building-level analysis optional — ${highCount} building${highCount === 1 ? '' : 's'} still ≥ ${BUILDING_GATE.toFixed(1)}.`;
+  } else {
+    cls = 'high';
+    icon = '→';
+    verdict = 'Proceed to building-level analysis';
+    detail = `Zone HVI ${score.toFixed(1)} ≥ ${BUILDING_GATE.toFixed(1)} after urban measures — escalate ${highCount} high-risk building${highCount === 1 ? '' : 's'} to Layer 1 (envelope retrofit assessment).`;
+  }
+  return (
+    <div className={`decision-gate ${cls}`}>
+      <div className="decision-gate-head">
+        <span className="decision-gate-icon">{icon}</span>
+        <span className="decision-gate-title">Decision gate · {verdict}</span>
+      </div>
+      <p>{detail}</p>
+    </div>
+  );
+}
+
+// First-use expansion of every acronym in the tool
+function Glossary() {
+  const terms = [
+    ['HVI', 'Heat Vulnerability Index — 0–10 composite of 12 weighted factors (index points, not °C)'],
+    ['LST', 'Land Surface Temperature — Landsat 8/9 thermal band, °C'],
+    ['NDVI', 'Normalized Difference Vegetation Index — Sentinel-2, 0–1 greenness'],
+    ['UTCI', 'Universal Thermal Climate Index — physiological "feels-like" temperature, °C'],
+    ['UHI', 'Urban Heat Island — zone LST minus city-mean LST, °C'],
+    ['H/W', 'Street canyon height-to-width ratio — controls shading and nocturnal heat retention'],
+  ];
+  return (
+    <details className="glossary">
+      <summary>Terminology &amp; definitions</summary>
+      <dl>
+        {terms.map(([k, v]) => (
+          <div key={k} className="glossary-row">
+            <dt>{k}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
   );
 }
 
@@ -316,8 +406,8 @@ export default function App() {
       {/* Header */}
       <header className="app-header">
         <div className="app-brand">
-          <span className="app-logo">🏙️ Urban Heat Analyzer</span>
-          <span className="app-subtitle">Heat Vulnerability Index · Barcelona</span>
+          <span className="app-logo">🏙️ Urban Heat Triage</span>
+          <span className="app-subtitle">Heat Vulnerability Index (HVI) · demo city: Barcelona</span>
         </div>
         <div className="app-status">
           {stats && !loading && (
@@ -419,6 +509,7 @@ export default function App() {
                   </div>
                 )}
 
+                <Glossary />
                 <DataSources />
               </div>
             </div>
@@ -441,6 +532,7 @@ export default function App() {
                   <>
                     <HVIGauge score={stats.mean_hvi} />
                     <StatGrid stats={stats} />
+                    <HVIScaleLegend score={stats.mean_hvi} />
                     <h4 className="section-title">Risk distribution</h4>
                     <RiskDistribution stats={stats} />
                     {zoneFactors && (
@@ -474,6 +566,7 @@ export default function App() {
                   <>
                     <HVIGauge score={stats.mean_hvi} />
                     <StatGrid stats={stats} />
+                    <HVIScaleLegend score={stats.mean_hvi} />
                     <h4 className="section-title">Risk distribution</h4>
                     <RiskDistribution stats={stats} />
                   </>
@@ -490,6 +583,14 @@ export default function App() {
                     <span style={{ borderColor: '#34d399', color: '#34d399' }}>Social · 40%</span>
                     <span style={{ borderColor: '#fb923c', color: '#fb923c' }}>Thermal · 25%</span>
                   </div>
+                  <p className="formula-cite">
+                    Index structure follows the heat-vulnerability framework of{' '}
+                    <a href="https://doi.org/10.1289/ehp.0900683" target="_blank" rel="noreferrer">
+                      Reid et al. 2009
+                    </a>{' '}
+                    (exposure · sensitivity · adaptive capacity); weights per studio methodology.
+                    Thermal inputs: Landsat C2 L2 LST, Sentinel-2 NDVI. Output in index points (0–10), not °C.
+                  </p>
                 </div>
                 <div className="tip-box">
                   💡 Click any building on the map for its vulnerability breakdown.
@@ -522,14 +623,27 @@ export default function App() {
                     </div>
                     <div className="climate-cell">
                       <span className="climate-value">{cc.heat_stress_hours_pct ?? '—'}%</span>
-                      <span className="climate-label">Heat-stress hours</span>
-                      <span className="climate-hint">Share of hours above stress threshold</span>
+                      <span className="climate-label">Vulnerable time</span>
+                      <span className="climate-hint">Hours with UTCI &gt; 32°C — strong heat stress, ISB UTCI scale</span>
                     </div>
                     <div className="climate-cell green">
                       <span className="climate-value">{cc.vegetation_count ?? '—'}</span>
                       <span className="climate-label">Trees in zone</span>
                       <span className="climate-hint">Vegetation features detected</span>
                     </div>
+                    {zoneFactors?.street_canyon && (() => {
+                      const c = zoneFactors.street_canyon.score;
+                      const level = c >= 0.6 ? 'High' : c >= 0.4 ? 'Moderate' : 'Low';
+                      return (
+                        <div className={`climate-cell ${c >= 0.6 ? 'hot' : ''}`}>
+                          <span className="climate-value">{level}</span>
+                          <span className="climate-label">Nocturnal retention</span>
+                          <span className="climate-hint">
+                            Deep canyons block sky view — stored heat re-radiates slowly at night (Oke 1981)
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Heatmap */}
@@ -562,6 +676,7 @@ export default function App() {
                     <span>📅 {cc.analysis_period || 'July 1–31, 10:00–18:00'}</span>
                     <span>🏢 {cc.buildings_count ?? '—'} buildings simulated</span>
                     <span>🛰️ Infrared SDK thermal model</span>
+                    <span>ⓘ Static envelope simulation over typical July conditions — not time-stepped</span>
                   </div>
                 </div>
               </div>
@@ -641,7 +756,7 @@ export default function App() {
                       </span>
                     </div>
                     <div className="whatif-col whatif-delta">
-                      <span className="whatif-label">Zone HVI</span>
+                      <span className="whatif-label">Δ HVI pts</span>
                       <span className="whatif-value" style={{ color: '#34d399' }}>
                         −{whatIfSummary.delta.toFixed(2)}
                       </span>
@@ -652,6 +767,13 @@ export default function App() {
                     Select interventions below to simulate their combined effect.
                   </div>
                 )}
+
+                {/* Decision gate: does this zone still need building-level work? */}
+                <DecisionGate
+                  before={stats?.mean_hvi}
+                  after={whatIfSummary?.meanAfter}
+                  buildings={(whatIfData || hviData)?.buildings_with_hvi}
+                />
 
                 {/* Finalize → generated climatic diagrams */}
                 <button
@@ -689,7 +811,7 @@ export default function App() {
                       </div>
                       <p className="iv-desc">{iv.description}</p>
                       <div className="iv-stats">
-                        <span className="iv-stat impact">−{meanZoneDelta.toFixed(2)} zone HVI</span>
+                        <span className="iv-stat impact">−{meanZoneDelta.toFixed(2)} HVI pts</span>
                         <span className="iv-stat">{affected} buildings</span>
                         <span className="iv-stat">{iv.cost.level}</span>
                         <span className="iv-stat">{iv.timeframe}</span>

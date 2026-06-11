@@ -1226,3 +1226,116 @@ body {
   line-height: 1.5;
   margin: 4px 2px 0;
 }
+
+/* ===== HVI risk-tier legend ===== */
+.hvi-scale-legend {
+  margin: 14px 0 4px;
+  padding: 10px 12px;
+  background: var(--bg-primary, #12141a);
+  border: 1px solid #2a2e3a;
+  border-radius: 10px;
+}
+.hvi-scale-legend h4 {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+.hvi-tier {
+  display: grid;
+  grid-template-columns: 10px 52px 58px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+}
+.hvi-tier.active {
+  background: #232733;
+  outline: 1px solid #3a3f4d;
+}
+.hvi-tier i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.hvi-tier-range { color: #94a3b8; font-variant-numeric: tabular-nums; }
+.hvi-tier-label { color: #e2e8f0; font-weight: 600; }
+.hvi-tier-action { color: #94a3b8; }
+
+/* ===== Decision gate banner ===== */
+.decision-gate {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid;
+}
+.decision-gate.safe { background: #16a34a14; border-color: #16a34a55; }
+.decision-gate.moderate { background: #f59e0b14; border-color: #f59e0b55; }
+.decision-gate.high { background: #ef444414; border-color: #ef444455; }
+.decision-gate-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.decision-gate-icon { font-size: 1rem; }
+.decision-gate.safe .decision-gate-icon, .decision-gate.safe .decision-gate-title { color: #4ade80; }
+.decision-gate.moderate .decision-gate-icon, .decision-gate.moderate .decision-gate-title { color: #fbbf24; }
+.decision-gate.high .decision-gate-icon, .decision-gate.high .decision-gate-title { color: #f87171; }
+.decision-gate-title {
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.decision-gate p {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #cbd5e1;
+}
+
+/* ===== Glossary ===== */
+.glossary {
+  margin: 14px 0;
+  padding: 10px 12px;
+  background: var(--bg-primary, #12141a);
+  border: 1px solid #2a2e3a;
+  border-radius: 10px;
+}
+.glossary summary {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #94a3b8;
+  cursor: pointer;
+}
+.glossary dl { margin: 8px 0 0; }
+.glossary-row {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 8px;
+  padding: 3px 0;
+}
+.glossary dt {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #93c5fd;
+}
+.glossary dd {
+  margin: 0;
+  font-size: 0.72rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+/* ===== Formula citation ===== */
+.formula-cite {
+  margin: 8px 0 0;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: #64748b;
+}
+.formula-cite a { color: #93c5fd; }

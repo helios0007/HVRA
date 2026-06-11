@@ -69,7 +69,7 @@ const HVIWaterfall = forwardRef(function HVIWaterfall({ buildings, activeIds }, 
       fontFamily="ui-monospace, 'SF Mono', Consolas, monospace"
     >
       <text x={PAD} y={20} fontSize="9.5" fill="#1a1a1a" fontWeight="600">
-        ZONE HVI WATERFALL — marginal contribution of each measure
+        ZONE HVI WATERFALL — marginal contribution of each measure (HVI index points, not °C)
       </text>
 
       {/* start bar */}

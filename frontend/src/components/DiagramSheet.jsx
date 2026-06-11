@@ -43,6 +43,7 @@ const HOURS = [
   { label: '12:00', value: 12 },
   { label: '15:00', value: 15 },
   { label: '17:00', value: 17 },
+  { label: '🌙 Night', value: 'night' },
 ];
 
 export default function DiagramSheet({ buildings, whatIfBuildings, activeIds, zoneFactors, onClose }) {
@@ -153,7 +154,9 @@ export default function DiagramSheet({ buildings, whatIfBuildings, activeIds, zo
           Sun position computed for Barcelona (41.4°N), June 21. Shadows cast from LOD1 building
           heights onto the section plane. Surface temperature: Landsat zone mean modulated by
           computed shading; intervention deltas use the published coefficients from the catalog.
-          Drawings export as SVG — editable in Illustrator.
+          Night view models nocturnal heat release — retention scales with canyon H/W after
+          Oke (1981). All values in °C here; HVI scores are index points. Drawings export as
+          SVG — editable in Illustrator.
         </p>
       </div>
     </div>

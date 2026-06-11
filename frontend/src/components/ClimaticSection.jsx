@@ -114,6 +114,25 @@ function ReflectArrows({ x0, x1, y }) {
   return <g>{items}</g>;
 }
 
+// Night re-radiation: wavy arrows rising from the street. Arrow height encodes
+// how freely stored heat escapes — deep canyons (high H/W) trap it.
+function NightRadiation({ x0, x1, groundY, hw }) {
+  const escape = Math.max(0.25, 1 - Math.min(hw, 2) / 2.4); // 0..1
+  const h = 14 + escape * 26;
+  const items = [];
+  const n = Math.max(2, Math.floor((x1 - x0) / 30));
+  for (let i = 1; i <= n; i++) {
+    const x = x0 + ((x1 - x0) * i) / (n + 1);
+    items.push(
+      <g key={i} stroke={RED} strokeWidth="1" fill="none" opacity="0.7">
+        <path d={`M${x},${groundY - 3} q3,-${h / 3} 0,-${(h * 2) / 3} q-3,-${h / 4} 0,-${h}`} />
+        <polyline points={`${x - 3},${groundY - h + 3} ${x},${groundY - h - 1} ${x + 3},${groundY - h + 3}`} />
+      </g>
+    );
+  }
+  return <g>{items}</g>;
+}
+
 // Climbing vegetation on a facade
 function FacadeVine({ x, y0, y1 }) {
   const h = y1 - y0;
@@ -154,10 +173,11 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
   const sunBandTop = 16;
 
   // Temperature strip below ground
+  const isNight = section.sun?.night;
   const stripTop = groundY + 40;
   const stripH = 78;
-  const tMax = section.zoneLstC + 6;
-  const tMin = Math.min(28, section.zoneLstC - 16);
+  const tMax = isNight ? section.zoneLstC - 2 : section.zoneLstC + 6;
+  const tMin = isNight ? section.zoneLstC - 20 : Math.min(28, section.zoneLstC - 16);
   const tToY = (t) => stripTop + stripH - ((t - tMin) / (tMax - tMin)) * stripH;
   const H = stripTop + stripH + 46;
 
@@ -184,30 +204,52 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
       style={{ background: '#fcfcfa', borderRadius: 8 }}
       fontFamily="ui-monospace, 'SF Mono', Consolas, monospace"
     >
-      {/* ---- sun + ray (computed) ---- */}
-      <g stroke={INK} fill="none" strokeWidth="1">
-        <circle cx={sunX} cy={sunY} r="7" fill="#fff" />
-        {[...Array(8)].map((_, i) => {
-          const a = (i * Math.PI) / 4;
-          return (
-            <line
-              key={i}
-              x1={sunX + Math.cos(a) * 10}
-              y1={sunY + Math.sin(a) * 10}
-              x2={sunX + Math.cos(a) * 13}
-              y2={sunY + Math.sin(a) * 13}
-            />
-          );
-        })}
-        {!sun.weak && (
-          <line x1={sunX} y1={sunY} x2={rayTargetX} y2={rayTargetY} strokeDasharray="4 4" stroke={FAINT} />
-        )}
-      </g>
-      <text x={sunX + (sun.shadowDir > 0 ? 18 : -18)} y={sunY + 4} fontSize="10" fill={INK}
-        textAnchor={sun.shadowDir > 0 ? 'start' : 'end'}>
-        21 Jun · {sun.solarHour}:00 solar · alt {sun.altitudeDeg.toFixed(0)}°
-        {sun.weak ? ' (⊥ to cut)' : ` · in-plane ${sun.inPlaneAltDeg.toFixed(0)}°`}
-      </text>
+      {/* ---- sun or moon (computed) ---- */}
+      {sun.night ? (
+        <g>
+          <path
+            d={`M${sunX},${sunY - 8} a8,8 0 1,0 8,8 a6.5,6.5 0 1,1 -8,-8`}
+            fill="#fff"
+            stroke={INK}
+            strokeWidth="1"
+          />
+          <text x={sunX + 18} y={sunY + 4} fontSize="10" fill={INK}>
+            21 Jun · night · stored heat re-radiates — deep canyons cool slowest (Oke 1981)
+          </text>
+        </g>
+      ) : (
+        <>
+          <g stroke={INK} fill="none" strokeWidth="1">
+            <circle cx={sunX} cy={sunY} r="7" fill="#fff" />
+            {[...Array(8)].map((_, i) => {
+              const a = (i * Math.PI) / 4;
+              return (
+                <line
+                  key={i}
+                  x1={sunX + Math.cos(a) * 10}
+                  y1={sunY + Math.sin(a) * 10}
+                  x2={sunX + Math.cos(a) * 13}
+                  y2={sunY + Math.sin(a) * 13}
+                />
+              );
+            })}
+            {!sun.weak && (
+              <line x1={sunX} y1={sunY} x2={rayTargetX} y2={rayTargetY} strokeDasharray="4 4" stroke={FAINT} />
+            )}
+          </g>
+          <text x={sunX + (sun.shadowDir > 0 ? 18 : -18)} y={sunY + 4} fontSize="10" fill={INK}
+            textAnchor={sun.shadowDir > 0 ? 'start' : 'end'}>
+            21 Jun · {sun.solarHour}:00 solar · alt {sun.altitudeDeg.toFixed(0)}°
+            {sun.weak ? ' (⊥ to cut)' : ` · in-plane ${sun.inPlaneAltDeg.toFixed(0)}°`}
+          </text>
+        </>
+      )}
+
+      {/* ---- night: re-radiation arrows, height = how freely heat escapes ---- */}
+      {sun.night &&
+        section.gaps.map((g, i) => (
+          <NightRadiation key={i} x0={X(g.x0)} x1={X(g.x1)} groundY={groundY} hw={g.hw} />
+        ))}
 
       {/* ---- shadows (actually cast) ---- */}
       {section.shadows.map((s, i) => (
@@ -334,10 +376,12 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
       {/* ---- temperature strip ---- */}
       <g>
         <text x={PAD} y={stripTop - 6} fontSize="9.5" fill={INK} fontWeight="600">
-          SURFACE TEMPERATURE °C
+          {isNight ? 'NOCTURNAL SURFACE TEMPERATURE °C' : 'SURFACE TEMPERATURE °C'}
         </text>
         <text x={W - PAD} y={stripTop - 6} fontSize="8.5" fill={FAINT} textAnchor="end">
-          Landsat zone mean {section.zoneLstC.toFixed(1)}°C + computed shading
+          {isNight
+            ? `post-sunset release of day heat (Landsat ${section.zoneLstC.toFixed(1)}°C) · retention ∝ H/W (Oke 1981)`
+            : `Landsat zone mean ${section.zoneLstC.toFixed(1)}°C + computed shading`}
         </text>
         {[tMin, (tMin + tMax) / 2, tMax].map((t) => (
           <g key={t}>
@@ -353,7 +397,7 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
         )}
         <g fontSize="9" transform={`translate(${PAD}, ${stripTop + stripH + 16})`}>
           <line x1="0" y1="-3" x2="18" y2="-3" stroke={RED} strokeWidth="1.6" />
-          <text x="23" y="0" fill={INK}>measured (before)</text>
+          <text x="23" y="0" fill={INK}>{isNight ? 'modelled night (before)' : 'measured (before)'}</text>
           {section.curveAfter && (
             <>
               <line x1="130" y1="-3" x2="148" y2="-3" stroke={BLUE} strokeWidth="1.6" />

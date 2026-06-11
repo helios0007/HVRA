@@ -153,11 +153,16 @@ export function buildSection(buildings, opts) {
     }
   }
 
-  // --- solar position & shadows ---
-  const sun = solarPosition(latMid, SUMMER_SOLSTICE_DOY, solarHour);
-  const proj = projectSunOntoSection(sun.altitudeDeg, sun.azimuthDeg, bearing);
+  // --- solar position & shadows (or night: no sun, canyon heat retention) ---
+  const isNight = solarHour === 'night';
+  const sun = isNight
+    ? { altitudeDeg: 0, azimuthDeg: 0 }
+    : solarPosition(latMid, SUMMER_SOLSTICE_DOY, solarHour);
+  const proj = isNight
+    ? { shadowDir: 1, shadowRatio: 0, inPlaneAltDeg: 0, weak: true }
+    : projectSunOntoSection(sun.altitudeDeg, sun.azimuthDeg, bearing);
   const shadows = [];
-  if (!proj.weak && proj.shadowRatio > 0.02) {
+  if (!isNight && !proj.weak && proj.shadowRatio > 0.02) {
     for (const p of profiles) {
       const len = p.height * proj.shadowRatio;
       const edge = proj.shadowDir > 0 ? p.x1 : p.x0;
@@ -204,12 +209,31 @@ export function buildSection(buildings, opts) {
   const after = [];
   const materialDelta = has('cool_pavement') ? -8 : has('depave_planting') ? -5 : 0;
 
+  // Night: surfaces release the heat stored during the day. Open ground cools
+  // freely; canyon floors cool slowly because buildings block the sky view —
+  // retention scales with H/W after Oke (1981): UHImax ≈ 7.45 + 3.97·ln(H/W).
+  // Materials that store less heat (permeable / high-albedo) release less.
+  const nightRetention = (x) => {
+    const gap = gaps.find((g) => x >= g.x0 && x <= g.x1);
+    if (!gap) return 0;
+    return Math.min(0.4 * (7.45 + 3.97 * Math.log(Math.max(gap.hw, 0.3))), 8);
+  };
+
   for (let x = 0; x <= length; x += STEP) {
     if (insideBuilding(x)) {
       before.push(null);
       after.push(null);
       continue;
     }
+
+    if (isNight) {
+      const baseT = zoneLstC - 14 + nightRetention(x);
+      before.push({ x, t: baseT });
+      // stored-heat reduction: half the daytime material delta; shading is moot
+      after.push({ x, t: baseT + materialDelta / 2 });
+      continue;
+    }
+
     const baseT = zoneLstC + 4 - (inShadow(x) ? 6 : 0);
     before.push({ x, t: baseT });
 
@@ -279,7 +303,7 @@ export function buildSection(buildings, opts) {
     facadeTag,
     curveBefore: smooth(before),
     curveAfter: activeIds.length ? smooth(after) : null,
-    sun: { ...sun, ...proj, solarHour },
+    sun: { ...sun, ...proj, solarHour, night: isNight },
     zoneLstC,
     maxHeight: Math.max(...profiles.map((p) => p.height)),
   };

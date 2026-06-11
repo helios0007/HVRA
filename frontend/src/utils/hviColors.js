@@ -46,3 +46,23 @@ export function riskLabel(score) {
 // CSS gradient matching HVI_STOPS — use for every legend
 export const HVI_GRADIENT_CSS =
   'linear-gradient(90deg, #90EE90 0%, #FFFF00 30%, #FFA500 40%, #FF4500 60%, #8B0000 80%)';
+
+// ---- Risk tiers & decision thresholds (single source of truth) ----
+// HVI is a 0–10 composite index (index points, NOT °C).
+// SAFE_THRESHOLD: below this, no intervention is needed.
+// BUILDING_GATE: if the zone stays at/above this after urban-scale measures,
+// building-level analysis (Layer 1) is warranted — the "decision gate".
+export const SAFE_THRESHOLD = 4.0;
+export const BUILDING_GATE = 5.5;
+
+export const HVI_TIERS = [
+  { min: 0, max: 4.0, label: 'Low', color: '#90EE90', action: 'No intervention needed' },
+  { min: 4.0, max: 5.5, label: 'Moderate', color: '#FFA500', action: 'Street-level measures recommended' },
+  { min: 5.5, max: 7.0, label: 'High', color: '#FF4500', action: 'Priority zone — urban + building measures' },
+  { min: 7.0, max: 10, label: 'Critical', color: '#8B0000', action: 'Immediate action — full retrofit pathway' },
+];
+
+export function riskTier(score) {
+  const s = score ?? 5;
+  return HVI_TIERS.find((t) => s < t.max) || HVI_TIERS[HVI_TIERS.length - 1];
+}
