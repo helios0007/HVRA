@@ -109,15 +109,30 @@ export function buildApartment(buildings, activeIds = [], peakUtci = 34) {
   const indoorBefore = indoorTemp(peakUtci, before);
   const indoorAfter = indoorTemp(peakUtci, after);
 
+  // Per-surface temperatures for the callouts (consistent before/after).
+  const surfaces = (indoor, m) => ({
+    roof: indoor + 3.2 * m.roofGain, // ceiling / roof soffit
+    swWall: indoor + 2.6 * m.solarGain, // sunlit SW wall inner face
+    glazing: peakUtci + 6 * m.solarGain, // single glazing runs hot
+    floor: indoor + 2.0 * m.solarGain, // sunlit floor patch
+    operative: indoor,
+  });
+
+  const height = best.properties.height || 16;
+  const floors = Math.max(2, Math.round(height / 3));
+
   return {
     persona: {
       year: year || null,
       label: 'Top-floor dwelling · SW facade · pre-1980 · elderly resident · no A/C',
       hviBefore: best.properties.hvi_score ?? null,
     },
+    building: { height, floors },
     peakUtci,
     before,
     after,
+    surfacesBefore: surfaces(indoorBefore, before),
+    surfacesAfter: surfaces(indoorAfter, after),
     indoorBefore,
     indoorAfter,
     indoorReduction: indoorBefore - indoorAfter,
