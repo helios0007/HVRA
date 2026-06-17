@@ -10,6 +10,19 @@
 //
 // `applicable(factors)` decides whether the intervention makes sense for a
 // given building (e.g. a cool roof only helps if the roof scores badly).
+//
+// regenTags classify each measure on the adaptation→regeneration ladder:
+//   adaptation   — protects the resident behind the window (now)
+//   resilience   — standardisable / replicable across the housing stock
+//   regeneration — gives back beyond the property line (district albedo,
+//                  street cooling, avoided A/C waste heat & peak grid load)
+// giveBack lists the beyond-the-window effects in plain language.
+
+export const REGEN_TAGS = {
+  adaptation: { label: 'Adaptation', color: '#38bdf8', desc: 'Protects the resident now' },
+  resilience: { label: 'Resilience', color: '#a78bfa', desc: 'Replicable across the stock' },
+  regeneration: { label: 'Regeneration', color: '#34d399', desc: 'Gives back beyond the window' },
+};
 
 export const INTERVENTION_CATALOG = [
   {
@@ -28,6 +41,8 @@ export const INTERVENTION_CATALOG = [
       lst: { add: -0.10 },
       uhi_delta: { add: -0.05 },
     },
+    regenTags: ['adaptation', 'resilience', 'regeneration'],
+    giveBack: ['Raises district albedo beyond the roof', 'Less heat radiated to the street', 'Cuts peak cooling load'],
     applicable: (f) => (f.roof_type?.score ?? 0) >= 0.4,
   },
   {
@@ -46,6 +61,8 @@ export const INTERVENTION_CATALOG = [
       no_ac: { add: -0.10 },
       lst: { add: -0.05 },
     },
+    regenTags: ['adaptation', 'regeneration'],
+    giveBack: ['Stormwater retention', 'Roof biodiversity', 'Cools floors below — less A/C demand'],
     applicable: (f) => (f.roof_type?.score ?? 0) >= 0.4,
   },
   {
@@ -66,6 +83,8 @@ export const INTERVENTION_CATALOG = [
       uhi_delta: { add: -0.05 },
       street_canyon: { add: -0.10 },
     },
+    regenTags: ['adaptation', 'regeneration'],
+    giveBack: ['Shades the public street', 'Evapotranspiration cooling', 'Carbon capture + biodiversity'],
     applicable: (f) => (f.green_space?.score ?? 0) >= 0.3 || (f.ndvi?.score ?? 0) >= 0.4,
   },
   {
@@ -85,6 +104,8 @@ export const INTERVENTION_CATALOG = [
       lst: { add: -0.10 },
       uhi_delta: { add: -0.05 },
     },
+    regenTags: ['adaptation', 'resilience', 'regeneration'],
+    giveBack: ['Cools the street surface', 'Stormwater infiltration', 'Restores soil & habitat'],
     applicable: (f) => (f.green_space?.score ?? 0) >= 0.4,
   },
   {
@@ -102,6 +123,8 @@ export const INTERVENTION_CATALOG = [
       lst: { add: -0.15 },
       uhi_delta: { add: -0.08 },
     },
+    regenTags: ['adaptation', 'resilience', 'regeneration'],
+    giveBack: ['Raises street albedo', 'Night-time street cooling'],
     applicable: (f) => (f.lst?.score ?? 0) >= 0.4,
   },
   {
@@ -119,6 +142,8 @@ export const INTERVENTION_CATALOG = [
       street_canyon: { add: -0.15 },
       lst: { add: -0.05 },
     },
+    regenTags: ['adaptation', 'regeneration'],
+    giveBack: ['Shades pedestrians in the public realm', 'Immediate street comfort'],
     applicable: (f) => (f.street_canyon?.score ?? 0) >= 0.4 || (f.lst?.score ?? 0) >= 0.6,
   },
   {
@@ -137,6 +162,8 @@ export const INTERVENTION_CATALOG = [
       ndvi: { add: -0.05 },
       lst: { add: -0.05 },
     },
+    regenTags: ['adaptation', 'regeneration'],
+    giveBack: ['Cools the street below', 'Facade biodiversity', 'Lower building energy use'],
     applicable: (f) => (f.construction_era?.score ?? 0) >= 0.5,
   },
   {
@@ -154,6 +181,8 @@ export const INTERVENTION_CATALOG = [
       construction_era: { set: 0.30 },
       no_ac: { add: -0.10 },
     },
+    regenTags: ['adaptation', 'resilience', 'regeneration'],
+    giveBack: ['Keeps the dwelling off A/C', 'Avoided waste heat to the street', 'Avoided peak grid load'],
     applicable: (f) => (f.construction_era?.score ?? 0) >= 0.6,
   },
   {
@@ -172,6 +201,8 @@ export const INTERVENTION_CATALOG = [
       elderly_population: { add: -0.15 },
       disability: { add: -0.20 },
     },
+    regenTags: ['adaptation', 'resilience'],
+    giveBack: ['Shared civic refuge', 'Protects isolated residents', 'Year-round community use'],
     applicable: (f) =>
       (f.elderly_population?.score ?? 0) >= 0.4 || (f.social_isolation?.score ?? 0) >= 0.5,
   },
@@ -190,6 +221,8 @@ export const INTERVENTION_CATALOG = [
       no_ac: { set: 0.20 },
       household_income: { add: -0.10 },
     },
+    regenTags: ['adaptation'],
+    giveBack: ['⚠ Adds A/C waste heat to the street', '⚠ Increases peak grid load'],
     applicable: (f) => (f.no_ac?.score ?? 0) >= 0.5,
   },
 ];

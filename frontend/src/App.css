@@ -1355,3 +1355,82 @@ body {
   align-items: center;
   gap: 12px;
 }
+
+/* ===== Climate scenario toggle ===== */
+.scenario-toggle { margin-bottom: 14px; }
+.scenario-switch {
+  display: flex;
+  gap: 0;
+  border: 1px solid #2a2e3a;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.scenario-switch button {
+  flex: 1;
+  padding: 7px 10px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  background: transparent;
+  color: #94a3b8;
+  border: none;
+  cursor: pointer;
+}
+.scenario-switch button.on { background: #b45309; color: #fff; }
+.scenario-switch button:first-child.on { background: #2563eb; }
+.scenario-note {
+  margin: 7px 2px 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: #94a3b8;
+}
+
+/* ===== Regenerative-ladder tags ===== */
+.regen-tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
+.regen-tag {
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border: 1px solid;
+  border-radius: 20px;
+}
+
+/* ===== Health-capital headline ===== */
+.health-panel {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(22,163,74,0.10), rgba(34,211,153,0.05));
+  border: 1px solid rgba(52,211,153,0.4);
+  border-radius: 10px;
+}
+.health-panel h4 { margin: 0 0 10px; font-size: 0.82rem; color: #d1fae5; }
+.health-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.health-cell { display: flex; flex-direction: column; gap: 2px; }
+.health-value { font-size: 1.25rem; font-weight: 700; color: #34d399; line-height: 1.1; }
+.health-label { font-size: 0.64rem; color: #94a3b8; line-height: 1.25; }
+.health-gap { margin-top: 12px; }
+.health-gap-bar {
+  height: 7px;
+  background: #1f2430;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+.health-gap-fill { height: 100%; background: linear-gradient(90deg,#34d399,#16a34a); }
+.health-gap-label { font-size: 0.7rem; color: #cbd5e1; }
+.health-empty { margin: 0; font-size: 0.76rem; color: #cbd5e1; line-height: 1.5; }
+
+/* ===== Give-back panel ===== */
+.giveback-panel {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  background: var(--bg-primary, #12141a);
+  border: 1px solid #2a2e3a;
+  border-radius: 10px;
+}
+.giveback-panel h4 { margin: 0 0 10px; font-size: 0.78rem; color: #93c5fd; }
+.giveback-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.giveback-cell { display: flex; flex-direction: column; gap: 2px; }
+.giveback-value { font-size: 1.0rem; font-weight: 700; color: #60a5fa; }
+.giveback-label { font-size: 0.66rem; color: #94a3b8; line-height: 1.25; }

@@ -5,8 +5,10 @@
 import { useMemo, useRef, useState } from 'react';
 import { buildSection } from '../utils/sectionGenerator';
 import { buildPlan } from '../utils/planGenerator';
+import { buildApartment } from '../utils/apartmentSection';
 import { INTERVENTION_CATALOG } from '../data/interventionCatalog.js';
 import ClimaticSection from './ClimaticSection';
+import ApartmentSection from './ApartmentSection';
 import PlanDrawing from './PlanDrawing';
 import HVIWaterfall from './HVIWaterfall';
 import FactorFingerprint from './FactorFingerprint';
@@ -48,11 +50,12 @@ const HOURS = [
   { label: '🌙 Night', value: 'night' },
 ];
 
-export default function DiagramSheet({ buildings, whatIfBuildings, activeIds, zoneFactors, zoneBounds, onClose }) {
+export default function DiagramSheet({ buildings, whatIfBuildings, activeIds, zoneFactors, zoneBounds, peakUtci = 34, onClose }) {
   const [orientation, setOrientation] = useState('NS');
   const [position, setPosition] = useState(0.5);
   const [solarHour, setSolarHour] = useState(15);
 
+  const apartmentRef = useRef(null);
   const sectionRef = useRef(null);
   const planRef = useRef(null);
   const waterfallRef = useRef(null);
@@ -60,6 +63,11 @@ export default function DiagramSheet({ buildings, whatIfBuildings, activeIds, zo
 
   // Landsat zone mean LST recovered from the factor score (score = (T−30)/18)
   const zoneLstC = 30 + (zoneFactors?.lst?.score ?? 0.6) * 18;
+
+  const apartment = useMemo(
+    () => buildApartment(buildings, activeIds, peakUtci),
+    [buildings, activeIds, peakUtci]
+  );
 
   const section = useMemo(
     () => buildSection(buildings, { orientation, position, solarHour, activeIds, zoneLstC }),
@@ -123,7 +131,18 @@ export default function DiagramSheet({ buildings, whatIfBuildings, activeIds, zo
           </div>
         </div>
 
-        {/* 1 — climatic section */}
+        {/* 1 — apartment coupled-performance section (the design argument) */}
+        <div className="diagram-card">
+          <div className="diagram-card-head">
+            <h3>Coupled performance — the resident's apartment</h3>
+            <button className="diagram-dl" onClick={() => downloadSVG(apartmentRef.current, 'apartment-section.svg')}>
+              ⬇ SVG
+            </button>
+          </div>
+          <ApartmentSection ref={apartmentRef} model={apartment} />
+        </div>
+
+        {/* 2 — climatic section */}
         <div className="diagram-card">
           <div className="diagram-card-head">
             <h3>Climatic section</h3>

@@ -107,6 +107,28 @@ export function summarizeZoneImpact(buildingsGeoJSON, interventionIds) {
   };
 }
 
+// Recompute zone statistics for a buildings FeatureCollection (used for the
+// climate-scenario view, where HVI is bumped client-side).
+export function computeZoneStats(buildingsGeoJSON) {
+  const scores = (buildingsGeoJSON?.features || [])
+    .map((f) => f.properties?.hvi_score)
+    .filter((s) => s !== undefined && s !== null);
+  if (!scores.length) return null;
+  const sorted = [...scores].sort((a, b) => a - b);
+  const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
+  const median = sorted[Math.floor(sorted.length / 2)];
+  return {
+    count: scores.length,
+    mean_hvi: Math.round(mean * 10) / 10,
+    median_hvi: Math.round(median * 10) / 10,
+    max_hvi: Math.max(...scores),
+    min_hvi: Math.min(...scores),
+    high_vulnerability: scores.filter((s) => s >= 7).length,
+    medium_vulnerability: scores.filter((s) => s >= 4 && s < 7).length,
+    low_vulnerability: scores.filter((s) => s < 4).length,
+  };
+}
+
 // For the catalog cards: zone-wide effect of each single intervention.
 export function rankInterventionsForZone(buildingsGeoJSON) {
   const feats = buildingsGeoJSON?.features?.filter((f) => f.properties?.hvi_factors) || [];

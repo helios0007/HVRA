@@ -16,8 +16,12 @@ import {
   applyInterventionsToZone,
   summarizeZoneImpact,
   rankInterventionsForZone,
+  computeZoneStats,
 } from './utils/interventionEngine';
 import { computeWhatIfHeatmap } from './utils/heatmapWhatIf';
+import { computeRegenerativeImpact } from './utils/regenerativeImpact';
+import { applyClimateScenario, compareScenarios, CLIMATE_SCENARIOS } from './utils/climateScenario';
+import { REGEN_TAGS } from './data/interventionCatalog';
 import './App.css';
 
 // Explanations and recommended interventions per vulnerability driver
@@ -140,6 +144,126 @@ function StatGrid({ stats }) {
   );
 }
 
+// Present-day ⇄ mid-century climate scenario toggle
+function ScenarioToggle({ scenario, setScenario, compare }) {
+  return (
+    <div className="scenario-toggle">
+      <div className="scenario-switch">
+        <button className={scenario === 'now' ? 'on' : ''} onClick={() => setScenario('now')}>
+          Present day
+        </button>
+        <button className={scenario === 'mid' ? 'on' : ''} onClick={() => setScenario('mid')}>
+          🌡 ~2050 (+2°C)
+        </button>
+      </div>
+      {compare && (
+        <p className="scenario-note">
+          Under mid-century warming the zone moves <strong>{compare.meanNow.toFixed(1)} → {compare.meanFuture.toFixed(1)}</strong> HVI
+          {compare.gateCrossings > 0
+            ? `, and ${compare.gateCrossings} building${compare.gateCrossings === 1 ? '' : 's'} cross into the building-intervention gate.`
+            : '. Priority shifts to the fastest-warming, least-vegetated blocks.'}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Regenerative-ladder tags (adaptation / resilience / regeneration)
+function RegenTags({ tags }) {
+  if (!tags?.length) return null;
+  return (
+    <div className="regen-tags">
+      {tags.map((t) => {
+        const meta = REGEN_TAGS[t];
+        if (!meta) return null;
+        return (
+          <span key={t} className="regen-tag" style={{ borderColor: meta.color, color: meta.color }} title={meta.desc}>
+            {meta.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+// Health-capital headline: harm avoided, not degrees avoided
+function HealthHeadline({ impact, hasInterventions }) {
+  if (!impact) return null;
+  const h = impact.health;
+  const perDecade = (v) => v * 10; // legible cluster-scale framing
+  return (
+    <div className="health-panel">
+      <h4>
+        Health capital {hasInterventions ? 'recovered' : 'at risk'}
+        <span className="section-hint"> · {impact.population.elderly} residents 65+ in cluster</span>
+      </h4>
+      {hasInterventions ? (
+        <>
+          <div className="health-grid">
+            <div className="health-cell">
+              <span className="health-value">{perDecade(h.deathsAvoided).toFixed(1)}</span>
+              <span className="health-label">heat deaths averted / decade</span>
+            </div>
+            <div className="health-cell">
+              <span className="health-value">{Math.round(perDecade(h.morbidityAvoided))}</span>
+              <span className="health-label">heat illness cases averted / decade</span>
+            </div>
+            <div className="health-cell">
+              <span className="health-value">{Math.round(h.sleepPersonNightsRecovered).toLocaleString()}</span>
+              <span className="health-label">person-nights of sleep recovered / summer</span>
+            </div>
+          </div>
+          <div className="health-gap">
+            <div className="health-gap-bar">
+              <div className="health-gap-fill" style={{ width: `${Math.min(100, h.gapClosedPct)}%` }} />
+            </div>
+            <span className="health-gap-label">
+              closes <strong>{h.gapClosedPct.toFixed(0)}%</strong> of the cluster's Regenerative Gap
+              (avoidable heat-harm in this housing stock)
+            </span>
+          </div>
+        </>
+      ) : (
+        <p className="health-empty">
+          Regenerative Gap: <strong>{perDecade(h.regenerativeGapDeaths).toFixed(1)}</strong> avoidable heat deaths / decade
+          and <strong>{Math.round(h.regenerativeGapNights ?? h.tropicalNightsNow)}</strong> tropical nights / summer
+          in this cluster. Select interventions to see how much each closes.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Ecological give-back beyond the property line
+function GiveBackPanel({ give }) {
+  if (!give) return null;
+  const items = [];
+  if (give.dwellingsOffAc > 0)
+    items.push([`${give.dwellingsOffAc}`, 'dwellings kept off A/C']);
+  if (give.avoidedPeakKw > 0)
+    items.push([`${Math.round(give.avoidedPeakKw)} kW`, 'peak grid load avoided']);
+  if (give.avoidedWasteHeatKw > 0)
+    items.push([`${Math.round(give.avoidedWasteHeatKw)} kW`, 'A/C waste heat kept off the street']);
+  if (give.roofAlbedoM2 > 0)
+    items.push([`${Math.round(give.roofAlbedoM2).toLocaleString()} m²`, 'roof albedo raised (district give-back)']);
+  if (give.greenedM2 > 0)
+    items.push([`${Math.round(give.greenedM2).toLocaleString()} m²`, 'new vegetation']);
+  if (!items.length) return null;
+  return (
+    <div className="giveback-panel">
+      <h4>Give-back beyond the window <span className="section-hint">· ecology</span></h4>
+      <div className="giveback-grid">
+        {items.map(([v, l]) => (
+          <div key={l} className="giveback-cell">
+            <span className="giveback-value">{v}</span>
+            <span className="giveback-label">{l}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Risk-tier legend: what each band means and what action it calls for
 function HVIScaleLegend({ score }) {
   return (
@@ -257,6 +381,7 @@ export default function App() {
   const [hviData, setHviData] = useState(null);
   const [activeInterventions, setActiveInterventions] = useState([]);
   const [showDiagrams, setShowDiagrams] = useState(false);
+  const [scenario, setScenario] = useState('now'); // 'now' | 'mid' (~2050)
 
   const toggleIntervention = (id) => {
     setActiveInterventions((prev) =>
@@ -264,46 +389,49 @@ export default function App() {
     );
   };
 
+  // Future-climate layer: present-day HVI, or warmed to mid-century (~2050).
+  // Everything downstream (stats, interventions, drawings, health) reads this.
+  const scenarioHvi = useMemo(() => {
+    if (!hviData) return null;
+    if (scenario === 'now') return hviData;
+    const warmed = applyClimateScenario(hviData.buildings_with_hvi, CLIMATE_SCENARIOS.mid.deltaC);
+    return { ...hviData, buildings_with_hvi: warmed, hvi_statistics: computeZoneStats(warmed) };
+  }, [hviData, scenario]);
+
+  // Present → 2050 comparison for the banner (always vs present-day base)
+  const climateCompare = useMemo(
+    () => (hviData ? compareScenarios(hviData.buildings_with_hvi, CLIMATE_SCENARIOS.mid.deltaC) : null),
+    [hviData]
+  );
+
   // Ranked catalog: zone-wide impact of each intervention alone
   const zoneRanking = useMemo(
-    () => rankInterventionsForZone(hviData?.buildings_with_hvi),
-    [hviData]
+    () => rankInterventionsForZone(scenarioHvi?.buildings_with_hvi),
+    [scenarioHvi]
   );
 
   // What-if dataset: buildings recolored with active interventions applied
   const whatIfData = useMemo(() => {
-    if (!hviData || !activeInterventions.length) return null;
-    const modified = applyInterventionsToZone(hviData.buildings_with_hvi, activeInterventions);
-    const scores = modified.features
-      .map((f) => f.properties?.hvi_score)
-      .filter((s) => s !== undefined);
-    const mean = scores.reduce((a, b) => a + b, 0) / (scores.length || 1);
+    if (!scenarioHvi || !activeInterventions.length) return null;
+    const modified = applyInterventionsToZone(scenarioHvi.buildings_with_hvi, activeInterventions);
     return {
-      ...hviData,
+      ...scenarioHvi,
       buildings_with_hvi: modified,
-      hvi_statistics: {
-        ...hviData.hvi_statistics,
-        mean_hvi: Math.round(mean * 10) / 10,
-        min_hvi: Math.min(...scores),
-        max_hvi: Math.max(...scores),
-        high_vulnerability: scores.filter((s) => s >= 7).length,
-        medium_vulnerability: scores.filter((s) => s >= 4 && s < 7).length,
-        low_vulnerability: scores.filter((s) => s < 4).length,
-      },
+      hvi_statistics: computeZoneStats(modified),
     };
-  }, [hviData, activeInterventions]);
+  }, [scenarioHvi, activeInterventions]);
 
   const whatIfSummary = useMemo(
     () =>
       activeInterventions.length
-        ? summarizeZoneImpact(hviData?.buildings_with_hvi, activeInterventions)
+        ? summarizeZoneImpact(scenarioHvi?.buildings_with_hvi, activeInterventions)
         : null,
-    [hviData, activeInterventions]
+    [scenarioHvi, activeInterventions]
   );
 
   // Mean of each factor across all buildings, for the zone-level methodology panel
   const zoneFactors = useMemo(() => {
-    const feats = hviData?.buildings_with_hvi?.features;
+    const feats = scenarioHvi?.buildings_with_hvi?.features;
     if (!feats?.length) return null;
     const sums = {};
     let n = 0;
@@ -322,7 +450,25 @@ export default function App() {
       mean[k] = { score: v.score / n, weight: v.weight };
     }
     return mean;
-  }, [hviData]);
+  }, [scenarioHvi]);
+
+  // Zone mean land-surface temperature (°C), recovered from the LST factor
+  const zoneLstC = 30 + (zoneFactors?.lst?.score ?? 0.6) * 18;
+  const peakUtci = selectedZone?.vulnerability_analysis?.climate_context?.peak_utci_celsius
+    ?? Math.round(zoneLstC - 4);
+
+  // Regenerative impact — health capital recovered + ecological give-back.
+  // The headline output: harm avoided, not degrees avoided.
+  const regenImpact = useMemo(
+    () =>
+      computeRegenerativeImpact(
+        scenarioHvi?.buildings_with_hvi,
+        whatIfData?.buildings_with_hvi,
+        activeInterventions,
+        zoneLstC
+      ),
+    [scenarioHvi, whatIfData, activeInterventions, zoneLstC]
+  );
 
   // UTCI heatmap underlay for the 3D views (from the step-1 simulation)
   const simGrid = selectedZone?.vulnerability_analysis?.simulation_grid;
@@ -342,14 +488,14 @@ export default function App() {
   const whatIfHeatmap = useMemo(() => {
     if (!baseHeatmap) return null;
     if (!activeInterventions.length) return baseHeatmap;
-    const url = computeWhatIfHeatmap(simGrid, hviData?.buildings_with_hvi, activeInterventions);
+    const url = computeWhatIfHeatmap(simGrid, scenarioHvi?.buildings_with_hvi, activeInterventions);
     if (!url) return baseHeatmap; // no raw grid (older analysis) — show original
     return {
       ...baseHeatmap,
       url,
       label: `${simGrid.unit || 'UTCI °C'} · with interventions`,
     };
-  }, [baseHeatmap, simGrid, hviData, activeInterventions]);
+  }, [baseHeatmap, simGrid, scenarioHvi, activeInterventions]);
 
   const handleZoneDrawn = async ({ feature, center }) => {
     setLoading(true);
@@ -427,7 +573,7 @@ export default function App() {
     }
   };
 
-  const stats = hviData?.hvi_statistics;
+  const stats = scenarioHvi?.hvi_statistics;
 
   return (
     <div className="app">
@@ -550,7 +696,7 @@ export default function App() {
             <div className="panel-main">
               <MapboxDeckView
                 buildingData={selectedZone.vulnerability_analysis?.buildings_3d}
-                hviData={hviData}
+                hviData={scenarioHvi}
                 zoneBounds={selectedZone.zone_geojson}
                 heatmap={baseHeatmap}
               />
@@ -559,6 +705,7 @@ export default function App() {
               <div className="panel-content">
                 {stats ? (
                   <>
+                    <ScenarioToggle scenario={scenario} setScenario={setScenario} compare={climateCompare} />
                     <HVIGauge score={stats.mean_hvi} />
                     <StatGrid stats={stats} />
                     <HVIScaleLegend score={stats.mean_hvi} />
@@ -759,7 +906,7 @@ export default function App() {
             <div className="panel-main">
               <MapboxDeckView
                 buildingData={selectedZone?.vulnerability_analysis?.buildings_3d}
-                hviData={whatIfData || hviData}
+                hviData={whatIfData || scenarioHvi}
                 zoneBounds={selectedZone?.zone_geojson}
                 heatmap={whatIfHeatmap}
               />
@@ -768,6 +915,11 @@ export default function App() {
               <div className="panel-content">
                 <h3>Design interventions</h3>
                 <p>Toggle measures to see the zone recolor with the projected HVI. Effects use published cooling coefficients.</p>
+
+                <ScenarioToggle scenario={scenario} setScenario={setScenario} compare={climateCompare} />
+
+                {/* Headline: health capital, not degrees */}
+                <HealthHeadline impact={regenImpact} hasInterventions={activeInterventions.length > 0} />
 
                 {/* Before / after summary */}
                 {whatIfSummary ? (
@@ -798,11 +950,14 @@ export default function App() {
                   </div>
                 )}
 
+                {/* Ecological give-back beyond the property line */}
+                {activeInterventions.length > 0 && <GiveBackPanel give={regenImpact?.giveBack} />}
+
                 {/* Decision gate: does this zone still need building-level work? */}
                 <DecisionGate
                   before={stats?.mean_hvi}
                   after={whatIfSummary?.meanAfter}
-                  buildings={(whatIfData || hviData)?.buildings_with_hvi}
+                  buildings={(whatIfData || scenarioHvi)?.buildings_with_hvi}
                 />
 
                 {/* Finalize → generated climatic diagrams */}
@@ -840,6 +995,7 @@ export default function App() {
                         </label>
                       </div>
                       <p className="iv-desc">{iv.description}</p>
+                      <RegenTags tags={iv.regenTags} />
                       <div className="iv-stats">
                         <span className="iv-stat impact">−{meanZoneDelta.toFixed(2)} HVI pts</span>
                         <span className="iv-stat">{affected} buildings</span>
@@ -873,13 +1029,14 @@ export default function App() {
       </div>
 
       {/* Generated diagram sheet overlay */}
-      {showDiagrams && hviData && (
+      {showDiagrams && scenarioHvi && (
         <DiagramSheet
-          buildings={hviData.buildings_with_hvi}
-          whatIfBuildings={whatIfData?.buildings_with_hvi || hviData.buildings_with_hvi}
+          buildings={scenarioHvi.buildings_with_hvi}
+          whatIfBuildings={whatIfData?.buildings_with_hvi || scenarioHvi.buildings_with_hvi}
           activeIds={activeInterventions}
           zoneFactors={zoneFactors}
           zoneBounds={selectedZone?.zone_geojson}
+          peakUtci={peakUtci}
           onClose={() => setShowDiagrams(false)}
         />
       )}
