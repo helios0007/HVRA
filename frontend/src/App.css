@@ -18,10 +18,14 @@
   --accent-red: #f87171;
   --accent-blue: #60a5fa;
   --accent-violet: #a78bfa;
+  /* brand accent — shared by the landing page and the dashboard chrome */
+  --accent: #ef6a4d;
+  --line: #1e2734;
   --radius: 10px;
   --radius-sm: 6px;
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Consolas, monospace;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -59,6 +63,7 @@ body {
   font-size: 17px;
   font-weight: 700;
   letter-spacing: 0.2px;
+  color: var(--accent);
 }
 
 .app-subtitle {
@@ -154,8 +159,8 @@ body {
 }
 
 .tab.active {
-  color: var(--accent-blue);
-  border-bottom-color: var(--accent-blue);
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 
 .tab:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -1436,21 +1441,22 @@ body {
 .giveback-label { font-size: 0.66rem; color: #94a3b8; line-height: 1.25; }
 /* ===================== LANDING PAGE ===================== */
 .landing {
-  --lp-bg: #0c0e13;
-  --lp-fg: #e8ebf1;
-  --lp-mut: #8b93a1;
-  --lp-line: #1b1f29;
-  --lp-accent: #ef6a4d;
+  /* inherit the shared design tokens so the landing and dashboard are one product */
+  --lp-bg: var(--bg-primary);
+  --lp-fg: var(--text-primary);
+  --lp-mut: var(--text-secondary);
+  --lp-line: var(--border-subtle);
+  --lp-accent: var(--accent);
   height: 100vh;
   overflow-y: auto;
   scroll-behavior: smooth;
   background: var(--lp-bg);
   color: var(--lp-fg);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font);
 }
 .landing a { color: inherit; text-decoration: none; }
 .lp-mono, .lp-eyebrow, .lp-section-n, .lp-section-label, .lp-nav-brand, .lp-step-n, .lp-chip {
-  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 /* nav */
