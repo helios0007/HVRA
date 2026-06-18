@@ -4,6 +4,7 @@ import MapboxDeckView from './components/MapboxDeckView';
 import HVI2DMap from './components/HVI2DMap';
 import FactorBreakdown from './components/FactorBreakdown';
 import DiagramSheet from './components/DiagramSheet';
+import LandingPage from './components/LandingPage';
 import {
   getHVIColorHex,
   riskLabel,
@@ -382,6 +383,7 @@ export default function App() {
   const [activeInterventions, setActiveInterventions] = useState([]);
   const [showDiagrams, setShowDiagrams] = useState(false);
   const [scenario, setScenario] = useState('now'); // 'now' | 'mid' (~2050)
+  const [showLanding, setShowLanding] = useState(true);
 
   const toggleIntervention = (id) => {
     setActiveInterventions((prev) =>
@@ -575,11 +577,15 @@ export default function App() {
 
   const stats = scenarioHvi?.hvi_statistics;
 
+  if (showLanding) {
+    return <LandingPage onLaunch={() => { setShowLanding(false); setActiveTab('analyze'); }} />;
+  }
+
   return (
     <div className="app">
       {/* Header */}
       <header className="app-header">
-        <div className="app-brand">
+        <div className="app-brand" onClick={() => setShowLanding(true)} style={{ cursor: 'pointer' }} title="Back to home">
           <span className="app-logo">🏙️ Urban Heat Triage</span>
           <span className="app-subtitle">Heat Vulnerability Index (HVI) · demo city: Barcelona</span>
         </div>
