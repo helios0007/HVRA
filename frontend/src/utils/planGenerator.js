@@ -55,7 +55,7 @@ export function buildPlan(buildings, contextBuildings, zoneBounds, activeIds = [
       if (y > n) n = y;
     }
   };
-  for (const f of allFeats) {
+  for (const f of feats) {
     const g = f.geometry;
     if (g.type === 'Polygon') g.coordinates.forEach(scan);
     else if (g.type === 'MultiPolygon') g.coordinates.forEach((p) => p.forEach(scan));
