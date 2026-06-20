@@ -380,10 +380,12 @@ export default function App() {
   const [loadingStep, setLoadingStep] = useState(0);
   const [analysisError, setAnalysisError] = useState('');
   const [hviData, setHviData] = useState(null);
+  const [contextBuildings, setContextBuildings] = useState(null);
   const [activeInterventions, setActiveInterventions] = useState([]);
   const [showDiagrams, setShowDiagrams] = useState(false);
   const [scenario, setScenario] = useState('now'); // 'now' | 'mid' (~2050)
   const [showLanding, setShowLanding] = useState(true);
+  const [showOnlyHighestVulnerable, setShowOnlyHighestVulnerable] = useState(false);
 
   const toggleIntervention = (id) => {
     setActiveInterventions((prev) =>
@@ -538,7 +540,12 @@ export default function App() {
       });
 
       if (hviResponse.ok) {
-        setHviData(await hviResponse.json());
+        const hviResponse_data = await hviResponse.json();
+        setHviData(hviResponse_data);
+        // Extract context buildings from thermal analysis if available
+        if (hviResponse_data.thermal_analysis?.buffer_zone_buildings) {
+          setContextBuildings(hviResponse_data.thermal_analysis.buffer_zone_buildings);
+        }
       }
 
       setActiveTab('explore3d');
@@ -1048,11 +1055,14 @@ export default function App() {
       {showDiagrams && scenarioHvi && (
         <DiagramSheet
           buildings={scenarioHvi.buildings_with_hvi}
+          contextBuildings={contextBuildings}
           whatIfBuildings={whatIfData?.buildings_with_hvi || scenarioHvi.buildings_with_hvi}
           activeIds={activeInterventions}
           zoneFactors={zoneFactors}
           zoneBounds={selectedZone?.zone_geojson}
           peakUtci={peakUtci}
+          showOnlyHighestVulnerable={showOnlyHighestVulnerable}
+          onToggleHighestVulnerable={() => setShowOnlyHighestVulnerable(!showOnlyHighestVulnerable)}
           onClose={() => setShowDiagrams(false)}
         />
       )}

@@ -95,18 +95,19 @@ const PlanDrawing = forwardRef(function PlanDrawing(
 
       {/* buildings */}
       {plan.buildings.map((b, i) => (
-        <g key={i}>
+        <g key={i} opacity={b.isContext ? 0.5 : 1}>
           <path
             d={buildingPath(b)}
-            fill={b.roof === 'green' ? '#16a34a22' : b.roof === 'cool' ? '#2563eb14' : '#fff'}
+            fill={b.isContext ? '#d3d3d3' : (b.roof === 'green' ? '#16a34a22' : b.roof === 'cool' ? '#2563eb14' : '#fff')}
             fillRule="evenodd"
             stroke={INK}
-            strokeWidth="1.1"
+            strokeWidth={b.isContext ? 0.7 : 1.1}
+            opacity={b.isContext ? 0.6 : 1}
           />
-          {b.retrofit && (
+          {b.retrofit && !b.isContext && (
             <path d={buildingPath(b)} fill="none" fillRule="evenodd" stroke={BLUE} strokeWidth="2.6" opacity="0.35" />
           )}
-          <circle cx={X(b.centroid[0])} cy={Y(b.centroid[1])} r="2.6" fill={getHVIColorHex(b.hvi ?? 5)} />
+          <circle cx={X(b.centroid[0])} cy={Y(b.centroid[1])} r="2.6" fill={getHVIColorHex(b.hvi ?? 5)} opacity={b.isContext ? 0.5 : 1} />
         </g>
       ))}
 

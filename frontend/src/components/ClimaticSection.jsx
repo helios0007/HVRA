@@ -187,11 +187,12 @@ function DimLine({ x0, x1, y, label }) {
 }
 
 // Cut building: poché walls/slabs, era-typical facade beyond
-function Building({ p, x, w, h, groundY, mY, xScale, sunnyRight, night }) {
+function Building({ p, x, w, h, groundY, mY, xScale, sunnyRight, night, isContext }) {
   const roofY = groundY - h;
   const wallPx = Math.max(WALL_M * xScale, 1.4);
   const slabPx = Math.max(SLAB_M * mY, 1.1);
   const detailed = mY >= 1.0 && w > 26;
+  const contextOpacity = isContext ? 0.4 : 1;
 
   const eraScore = p.factors?.construction_era?.score ?? 0.5;
   const old = p.year ? p.year < 1980 : eraScore >= 0.55;
@@ -209,9 +210,9 @@ function Building({ p, x, w, h, groundY, mY, xScale, sunnyRight, night }) {
   const Ym = (m) => groundY - m * mY;
 
   return (
-    <g>
+    <g opacity={contextOpacity}>
       {/* face beyond */}
-      <rect x={x} y={roofY} width={w} height={h} fill="#fdfdfb" />
+      <rect x={x} y={roofY} width={w} height={h} fill={isContext ? "#e8e8e8" : "#fdfdfb"} />
 
       {detailed && (
         <g>
@@ -491,6 +492,7 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
               xScale={xScale}
               sunnyRight={sun.shadowDir > 0}
               night={isNight}
+              isContext={p.isContext}
             />
 
             {/* envelope retrofit: insulation as inner dashed offset */}

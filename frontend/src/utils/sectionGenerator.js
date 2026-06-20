@@ -53,6 +53,7 @@ function edgeCrossing(ax, ay, ux, uy, len, q1, q2) {
  * Build the section model.
  *
  * @param buildings  FeatureCollection (buildings_with_hvi)
+ * @param contextBuildings  FeatureCollection (buffer zone buildings) - optional
  * @param opts {
  *   orientation: 'NS' | 'EW'   — direction the cut line runs
  *   position: 0..1             — where across the zone the cut sits
@@ -61,13 +62,22 @@ function edgeCrossing(ax, ay, ux, uy, len, q1, q2) {
  *   zoneLstC: number           — Landsat zone mean LST in °C
  * }
  */
-export function buildSection(buildings, opts) {
+export function buildSection(buildings, contextBuildings, opts) {
+  // Handle both old API (3 args) and new API (2 args with contextBuildings in opts)
+  if (!opts && contextBuildings && typeof contextBuildings === 'object' && !('features' in contextBuildings)) {
+    opts = contextBuildings;
+    contextBuildings = null;
+  }
   const feats = buildings?.features?.filter((f) => f.geometry) || [];
   if (!feats.length) return null;
 
   const { orientation = 'NS', position = 0.5, solarHour = 12, activeIds = [], zoneLstC = 42 } = opts;
 
-  const bbox = bboxOfBuildings(feats);
+  // Add context buildings to the section if available
+  const contextFeats = contextBuildings?.features?.filter((f) => f.geometry) || [];
+  const allFeats = [...feats, ...contextFeats];
+
+  const bbox = bboxOfBuildings(allFeats);
   const latMid = (bbox.s + bbox.n) / 2;
   const mPerDegLon = M_PER_DEG_LAT * Math.cos((latMid * Math.PI) / 180);
 
@@ -99,7 +109,9 @@ export function buildSection(buildings, opts) {
 
   // --- intersect every building footprint with the cut line (even-odd) ---
   const intervals = [];
-  for (const f of feats) {
+  for (const f of allFeats) {
+    // Mark context buildings as such for styling
+    const isContextBuilding = contextFeats.includes(f);
     const g = f.geometry;
     const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
     const ts = [];
@@ -124,6 +136,7 @@ export function buildSection(buildings, opts) {
           hviBefore: f.properties?.hvi_score_before ?? f.properties?.hvi_score ?? null,
           factors: f.properties?.hvi_factors || null,
           year: f.properties?.construction_year ?? null,
+          isContext: isContextBuilding,
         });
       }
     }

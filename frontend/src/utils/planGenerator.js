@@ -31,9 +31,19 @@ function pointInRing(px, py, ring) {
   return inside;
 }
 
-export function buildPlan(buildings, zoneBounds, activeIds = []) {
+export function buildPlan(buildings, contextBuildings, zoneBounds, activeIds = []) {
+  // Handle both old API (3 args) and new API (4 args)
+  if (contextBuildings && typeof contextBuildings === 'object' && !('features' in contextBuildings) && Array.isArray(contextBuildings)) {
+    activeIds = zoneBounds;
+    zoneBounds = contextBuildings;
+    contextBuildings = null;
+  }
+
   const feats = buildings?.features?.filter((f) => f.geometry) || [];
-  if (!feats.length) return null;
+  const contextFeats = contextBuildings?.features?.filter((f) => f.geometry) || [];
+  const allFeats = [...feats, ...contextFeats];
+
+  if (!allFeats.length) return null;
 
   // ---- bbox & projection (metres from the SW corner) ----
   let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
@@ -45,7 +55,7 @@ export function buildPlan(buildings, zoneBounds, activeIds = []) {
       if (y > n) n = y;
     }
   };
-  for (const f of feats) {
+  for (const f of allFeats) {
     const g = f.geometry;
     if (g.type === 'Polygon') g.coordinates.forEach(scan);
     else if (g.type === 'MultiPolygon') g.coordinates.forEach((p) => p.forEach(scan));
@@ -65,7 +75,8 @@ export function buildPlan(buildings, zoneBounds, activeIds = []) {
 
   // ---- buildings: rings in metres, centroid, HVI, roof treatment ----
   const items = [];
-  for (const f of feats) {
+  for (const f of allFeats) {
+    const isContext = contextFeats.includes(f);
     const g = f.geometry;
     const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
     const rings = [];
@@ -89,6 +100,7 @@ export function buildPlan(buildings, zoneBounds, activeIds = []) {
       hvi: f.properties?.hvi_score ?? null,
       retrofit: has('envelope_retrofit') && applies('envelope_retrofit', factors),
       roof,
+      isContext,
     });
   }
 

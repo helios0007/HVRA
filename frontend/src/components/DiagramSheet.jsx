@@ -50,7 +50,7 @@ const HOURS = [
   { label: '🌙 Night', value: 'night' },
 ];
 
-export default function DiagramSheet({ buildings, whatIfBuildings, activeIds, zoneFactors, zoneBounds, peakUtci = 34, onClose }) {
+export default function DiagramSheet({ buildings, contextBuildings, whatIfBuildings, activeIds, zoneFactors, zoneBounds, peakUtci = 34, showOnlyHighestVulnerable, onToggleHighestVulnerable, onClose }) {
   const [orientation, setOrientation] = useState('NS');
   const [position, setPosition] = useState(0.5);
   const [solarHour, setSolarHour] = useState(15);
@@ -64,19 +64,30 @@ export default function DiagramSheet({ buildings, whatIfBuildings, activeIds, zo
   // Landsat zone mean LST recovered from the factor score (score = (T−30)/18)
   const zoneLstC = 30 + (zoneFactors?.lst?.score ?? 0.6) * 18;
 
+  // Filter buildings: if showOnlyHighestVulnerable, show only the highest HVI building (grey out others in viz)
+  const filteredBuildings = useMemo(() => {
+    if (!showOnlyHighestVulnerable || !buildings?.features) return buildings;
+    const maxBuilding = buildings.features.reduce((max, f) => {
+      const fHvi = f.properties?.hvi_score ?? 0;
+      const maxHvi = max.properties?.hvi_score ?? 0;
+      return fHvi > maxHvi ? f : max;
+    });
+    return { ...buildings, features: [maxBuilding] };
+  }, [buildings, showOnlyHighestVulnerable]);
+
   const apartment = useMemo(
-    () => buildApartment(buildings, activeIds, peakUtci),
-    [buildings, activeIds, peakUtci]
+    () => buildApartment(filteredBuildings, activeIds, peakUtci),
+    [filteredBuildings, activeIds, peakUtci]
   );
 
   const section = useMemo(
-    () => buildSection(buildings, { orientation, position, solarHour, activeIds, zoneLstC }),
-    [buildings, orientation, position, solarHour, activeIds, zoneLstC]
+    () => buildSection(filteredBuildings, contextBuildings, { orientation, position, solarHour, activeIds, zoneLstC }),
+    [filteredBuildings, contextBuildings, orientation, position, solarHour, activeIds, zoneLstC]
   );
 
   const plan = useMemo(
-    () => buildPlan(buildings, zoneBounds, activeIds),
-    [buildings, zoneBounds, activeIds]
+    () => buildPlan(filteredBuildings, contextBuildings, zoneBounds, activeIds),
+    [filteredBuildings, contextBuildings, zoneBounds, activeIds]
   );
 
   const activeNames = useMemo(
@@ -84,7 +95,7 @@ export default function DiagramSheet({ buildings, whatIfBuildings, activeIds, zo
     [activeIds]
   );
 
-  const factorsBefore = useMemo(() => meanFactors(buildings), [buildings]);
+  const factorsBefore = useMemo(() => meanFactors(filteredBuildings), [filteredBuildings]);
   const factorsAfter = useMemo(
     () => (activeIds.length ? meanFactors(whatIfBuildings) : null),
     [whatIfBuildings, activeIds]
@@ -128,6 +139,15 @@ export default function DiagramSheet({ buildings, whatIfBuildings, activeIds, zo
                   onClick={() => setSolarHour(h.value)}>{h.label}</button>
               ))}
             </div>
+          </div>
+          <div className="diagram-control">
+            <button
+              className={`diagram-toggle ${showOnlyHighestVulnerable ? 'on' : ''}`}
+              onClick={onToggleHighestVulnerable}
+              title="Show only the highest vulnerable building"
+            >
+              {showOnlyHighestVulnerable ? '🔴 Highest HVI Only' : '⚪ All Buildings'}
+            </button>
           </div>
         </div>
 
