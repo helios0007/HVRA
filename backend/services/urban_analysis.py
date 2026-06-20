@@ -654,6 +654,11 @@ def _local_to_geographic(local_x: float, local_y: float, zone_bounds: Dict, loca
 
     Infrared SDK returns coordinates in a local meter space (typically centered or relative
     to analysis area, not the zone's SW corner). We normalize to zone space then transform.
+
+    DEBUG: If buildings are misaligned, check:
+    1. Is local_x the easting (horizontal/X) and local_y the northing (vertical/Y)?
+    2. Is zone_bounds actually [west, south, east, north] in [lon, lat]?
+    3. Is local_bounds the min/max of ALL zone buildings (not including context)?
     """
     import math
 
@@ -852,8 +857,12 @@ def _buildings_to_geojson(buildings_list, zone_geojson: Dict, local_bounds: Dict
                 if len(geo_coords[0]) >= 3:
                     coordinates = geo_coords
                     if i == 0:
-                        print(f"[DEBUG] First building after transformation: {geo_coords[0][0] if geo_coords[0] else 'N/A'}")
-                        print(f"[DEBUG] local_bounds used? {bool(local_bounds)}")
+                        print(f"[BUILDINGS_GEOJSON] ===== FIRST BUILDING DEBUG =====")
+                        print(f"[BUILDINGS_GEOJSON] Local footprint (raw): {footprint.exterior.coords[0] if footprint.exterior.coords else 'N/A'}")
+                        print(f"[BUILDINGS_GEOJSON] Geographic footprint (transformed): {geo_coords[0][0] if geo_coords[0] else 'N/A'}")
+                        print(f"[BUILDINGS_GEOJSON] Zone bounds: west={zone_bounds['west']}, south={zone_bounds['south']}, east={zone_bounds['east']}, north={zone_bounds['north']}")
+                        print(f"[BUILDINGS_GEOJSON] Local bounds: {local_bounds}")
+                        print(f"[BUILDINGS_GEOJSON] ===== END DEBUG =====")
 
             # Fallback: try geometry/footprint attributes
             elif hasattr(building, 'geometry'):
@@ -1242,6 +1251,17 @@ def _buildings_to_threejs_geometry(buildings_list, zone_geojson: Dict, vulnerabi
             ext = rings[0]
             center_lon = sum(c[0] for c in ext) / len(ext)
             center_lat = sum(c[1] for c in ext) / len(ext)
+
+            # DEBUG: Log first building transformation
+            if building_id == "0" or building_id == 0:
+                print(f"[THREE_JS] ===== FIRST BUILDING DEBUG (THREEJS) =====")
+                print(f"[THREE_JS] Building ID: {building_id}")
+                print(f"[THREE_JS] Local footprint exterior (first 3 verts): {list(footprint.exterior.coords)[:3]}")
+                print(f"[THREE_JS] Geographic footprint exterior (first 3 verts): {rings[0][:3] if rings[0] else 'N/A'}")
+                print(f"[THREE_JS] Zone bounds: {zone_bounds}")
+                print(f"[THREE_JS] Local bounds: {local_bounds}")
+                print(f"[THREE_JS] Center: [{center_lon}, {center_lat}]")
+                print(f"[THREE_JS] ===== END DEBUG =====")
 
             # Keep only buildings inside the drawn zone (unless this is the buffer zone)
             if not is_buffer_zone and zone_poly is not None and not zone_poly.contains(Point(center_lon, center_lat)):
