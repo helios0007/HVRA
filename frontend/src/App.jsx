@@ -675,9 +675,15 @@ export default function App() {
                       <span className="value">{selectedZone.vulnerability_analysis?.climate_context?.peak_utci_celsius}°C</span>
                     </div>
                     <div className="metric">
-                      <label>Buildings</label>
-                      <span className="value">{selectedZone.vulnerability_analysis?.buildings_3d?.count}</span>
+                      <label>Zone Buildings</label>
+                      <span className="value">{selectedZone.vulnerability_analysis?.zone_buildings?.count || selectedZone.vulnerability_analysis?.buildings_3d?.count}</span>
                     </div>
+                    {selectedZone.vulnerability_analysis?.buffer_zone_buildings?.count > 0 && (
+                      <div className="metric">
+                        <label>Context Buildings</label>
+                        <span className="value">{selectedZone.vulnerability_analysis?.buffer_zone_buildings?.count}</span>
+                      </div>
+                    )}
                     {selectedZone.vulnerability_analysis?.drivers?.length > 0 && (
                       <div className="metric">
                         <label>Top driver</label>
@@ -701,6 +707,8 @@ export default function App() {
           <div className="tab-panel">
             <div className="panel-main">
               <MapboxDeckView
+                zoneBuildings={selectedZone.vulnerability_analysis?.zone_buildings}
+                bufferZoneBuildings={selectedZone.vulnerability_analysis?.buffer_zone_buildings}
                 buildingData={selectedZone.vulnerability_analysis?.buildings_3d}
                 hviData={scenarioHvi}
                 zoneBounds={selectedZone.zone_geojson}
@@ -911,6 +919,8 @@ export default function App() {
           <div className="tab-panel">
             <div className="panel-main">
               <MapboxDeckView
+                zoneBuildings={selectedZone?.vulnerability_analysis?.zone_buildings}
+                bufferZoneBuildings={selectedZone?.vulnerability_analysis?.buffer_zone_buildings}
                 buildingData={selectedZone?.vulnerability_analysis?.buildings_3d}
                 hviData={whatIfData || scenarioHvi}
                 zoneBounds={selectedZone?.zone_geojson}

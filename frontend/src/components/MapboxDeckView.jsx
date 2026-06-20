@@ -15,7 +15,7 @@ function buildingsToGeoJSON(buildingData) {
   return buildingData;
 }
 
-export default function MapboxDeckView({ buildingData, hviData, zoneBounds, heatmap }) {
+export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, buildingData, hviData, zoneBounds, heatmap }) {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const overlay = useRef(null);
@@ -34,7 +34,7 @@ export default function MapboxDeckView({ buildingData, hviData, zoneBounds, heat
   const [heatOpacity, setHeatOpacity] = useState(55);
 
   // Interaction state
-  const [hovered, setHovered] = useState(null);   // { x, y, properties }
+  const [hovered, setHovered] = useState(null);   // { x, y, properties, isBuffer }
   const [selected, setSelected] = useState(null); // feature properties
 
   useEffect(() => {
@@ -130,14 +130,16 @@ export default function MapboxDeckView({ buildingData, hviData, zoneBounds, heat
       );
     }
 
-    const buildingsToRender = hviData?.buildings_with_hvi || buildingData;
+    const buildingsToRender = hviData?.buildings_with_hvi || zoneBuildings || buildingData;
+    const bufferBuildingsToRender = bufferZoneBuildings?.features?.length > 0 ? bufferZoneBuildings : null;
 
+    // Render zone buildings (colored by vulnerability)
     if (buildingsToRender) {
       const buildingGeoJSON = buildingsToGeoJSON(buildingsToRender);
 
-      // Keep only buildings inside the drawn zone
+      // Keep only buildings inside the drawn zone (if not already filtered by backend)
       let inZone = buildingGeoJSON.features;
-      if (zoneBounds) {
+      if (zoneBounds && !zoneBuildings) {
         const zoneFeature = { type: 'Feature', geometry: zoneBounds, properties: {} };
         inZone = inZone.filter((f) => {
           try {
@@ -179,8 +181,8 @@ export default function MapboxDeckView({ buildingData, hviData, zoneBounds, heat
           },
           onHover: (info) => {
             if (info.object) {
-              setHovered({ x: info.x, y: info.y, properties: info.object.properties });
-            } else {
+              setHovered({ x: info.x, y: info.y, properties: info.object.properties, isBuffer: false });
+            } else if (!bufferBuildingsToRender) {
               setHovered(null);
             }
           },
@@ -190,6 +192,51 @@ export default function MapboxDeckView({ buildingData, hviData, zoneBounds, heat
           updateTriggers: {
             getElevation: [heightScale],
             getFillColor: [opacity, relativeColors, hviFilter, scoreRange],
+          },
+        })
+      );
+    }
+
+    // Render buffer zone buildings (grey with lower opacity)
+    if (bufferBuildingsToRender) {
+      const bufferGeoJSON = buildingsToGeoJSON(bufferBuildingsToRender);
+      const bufferFeatures = bufferGeoJSON.features || [];
+
+      layers.push(
+        new GeoJsonLayer({
+          id: 'buffer-buildings-layer',
+          data: { type: 'FeatureCollection', features: bufferFeatures },
+          pickable: true,
+          extruded: true,
+          wireframe,
+          filled: true,
+          stroked: false,
+          getElevation: (f) => (f.properties.height || 15) * heightScale,
+          getFillColor: (f) => {
+            // Grey color for context buildings: [128, 128, 128, opacity]
+            return [128, 128, 128, Math.round((opacity * 0.6) * 2.55)];
+          },
+          getLineColor: [80, 80, 80, 160],
+          lineWidthMinPixels: 1,
+          material: {
+            ambient: 0.45,
+            diffuse: 0.7,
+            shininess: 28,
+            specularColor: [60, 64, 70],
+          },
+          onHover: (info) => {
+            if (info.object) {
+              setHovered({ x: info.x, y: info.y, properties: info.object.properties, isBuffer: true });
+            } else {
+              setHovered(null);
+            }
+          },
+          onClick: () => {
+            // Don't select context buildings for inspector
+          },
+          updateTriggers: {
+            getElevation: [heightScale],
+            getFillColor: [opacity],
           },
         })
       );
@@ -212,10 +259,11 @@ export default function MapboxDeckView({ buildingData, hviData, zoneBounds, heat
     }
 
     overlay.current.setProps({ layers });
-  }, [buildingData, hviData, zoneBounds, styleReady, heightScale, opacity, hviFilter, wireframe, relativeColors, displayScore, heatmap, showHeatmap, heatOpacity]);
+  }, [zoneBuildings, bufferZoneBuildings, buildingData, hviData, zoneBounds, styleReady, heightScale, opacity, hviFilter, wireframe, relativeColors, displayScore, heatmap, showHeatmap, heatOpacity]);
 
   const hp = hovered?.properties;
   const hScore = hp ? (hp.hvi_score ?? hp.vulnerability_score ?? 5.0) : null;
+  const isBufferBuilding = hovered?.isBuffer;
 
   return (
     <div className="deck-view">
@@ -224,19 +272,31 @@ export default function MapboxDeckView({ buildingData, hviData, zoneBounds, heat
       {/* Hover tooltip — swatch color always matches the rendered building */}
       {hovered && (
         <div className="deck-tooltip" style={{ left: hovered.x + 14, top: hovered.y + 14 }}>
-          <div className="deck-tooltip-score" style={{ color: getHVIColorHex(displayScore(hScore)) }}>
-            HVI {hScore.toFixed(1)} · {riskLabel(hScore)}
-          </div>
-          <div className="deck-tooltip-row">Height: {(hp.height || 0).toFixed(0)} m</div>
-          {hp.hvi_factors?.construction_era && (
-            <div className="deck-tooltip-row">Era score: {hp.hvi_factors.construction_era.score.toFixed(2)}</div>
+          {isBufferBuilding ? (
+            <>
+              <div className="deck-tooltip-score" style={{ color: '#888' }}>
+                Context building (outside zone)
+              </div>
+              <div className="deck-tooltip-row">Vulnerability: {hScore.toFixed(1)}</div>
+              <div className="deck-tooltip-row">Height: {(hp.height || 0).toFixed(0)} m</div>
+            </>
+          ) : (
+            <>
+              <div className="deck-tooltip-score" style={{ color: getHVIColorHex(displayScore(hScore)) }}>
+                HVI {hScore.toFixed(1)} · {riskLabel(hScore)}
+              </div>
+              <div className="deck-tooltip-row">Height: {(hp.height || 0).toFixed(0)} m</div>
+              {hp.hvi_factors?.construction_era && (
+                <div className="deck-tooltip-row">Era score: {hp.hvi_factors.construction_era.score.toFixed(2)}</div>
+              )}
+              {relativeColors && (
+                <div className="deck-tooltip-row" style={{ fontStyle: 'italic' }}>
+                  Color stretched to zone range
+                </div>
+              )}
+              <div className="deck-tooltip-hint">Click for full breakdown</div>
+            </>
           )}
-          {relativeColors && (
-            <div className="deck-tooltip-row" style={{ fontStyle: 'italic' }}>
-              Color stretched to zone range
-            </div>
-          )}
-          <div className="deck-tooltip-hint">Click for full breakdown</div>
         </div>
       )}
 

@@ -1,14 +1,16 @@
 import asyncio
 import base64
 import logging
+import math
 from io import BytesIO
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")  # headless backend — Tk crashes when used from worker threads
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
+from shapely.geometry import Polygon, Point
 
 from infrared_sdk.analyses.types import (
     AnalysesName,
@@ -23,6 +25,80 @@ from infrared_sdk.models import Location, TimePeriod
 from services.infrared_client import get_infrared_client
 
 logger = logging.getLogger(__name__)
+
+
+def _degrees_to_meters(degrees: float, latitude: float) -> float:
+    """Convert degrees to meters at given latitude."""
+    meters_per_deg_lat = 111320.0
+    meters_per_deg_lon = 111320.0 * math.cos(math.radians(latitude))
+    return degrees * meters_per_deg_lon
+
+
+def _create_buffer_zone(zone_geojson: Dict, buffer_meters: float = 150) -> Polygon:
+    """Create a buffer zone polygon around the zone (in degrees, approximate)."""
+    coords_raw = zone_geojson.get("coordinates", [])
+    if coords_raw and isinstance(coords_raw[0], (int, float)):
+        coords = [coords_raw]
+    else:
+        coords = coords_raw[0] if coords_raw else []
+
+    if not coords:
+        return None
+
+    # Get zone center latitude for degree-to-meter conversion
+    lats = [c[1] for c in coords if len(c) >= 2]
+    center_lat = sum(lats) / len(lats) if lats else 0
+
+    # Convert buffer meters to degrees (approximate)
+    buffer_degrees = buffer_meters / 111320.0
+
+    zone_polygon = Polygon(coords)
+    buffered_polygon = zone_polygon.buffer(buffer_degrees)
+
+    return buffered_polygon
+
+
+def _point_in_polygon(point: Tuple[float, float], polygon: Polygon) -> bool:
+    """Check if a point is inside a polygon."""
+    return polygon.contains(Point(point))
+
+
+def _separate_buildings_by_zone(buildings_geojson: Dict, zone_geojson: Dict, buffer_meters: float = 150) -> Tuple[List[Dict], List[Dict]]:
+    """
+    Separate buildings into zone and buffer zone buildings.
+    Returns: (zone_buildings, buffer_buildings)
+    """
+    zone_polygon = Polygon(_extract_coords_from_geojson(zone_geojson))
+    buffer_polygon = _create_buffer_zone(zone_geojson, buffer_meters)
+
+    zone_buildings = []
+    buffer_buildings = []
+
+    for feature in buildings_geojson.get('features', []):
+        geometry = feature.get('geometry', {})
+        if geometry.get('type') == 'Polygon':
+            coords = geometry.get('coordinates', [[]])[0]
+            if coords:
+                centroid = Point(
+                    sum(c[0] for c in coords) / len(coords),
+                    sum(c[1] for c in coords) / len(coords)
+                )
+
+                if zone_polygon.contains(centroid):
+                    zone_buildings.append(feature)
+                elif buffer_polygon and buffer_polygon.contains(centroid):
+                    buffer_buildings.append(feature)
+
+    return zone_buildings, buffer_buildings
+
+
+def _extract_coords_from_geojson(zone_geojson: Dict) -> List[List[float]]:
+    """Extract coordinate ring from zone GeoJSON."""
+    coords_raw = zone_geojson.get("coordinates", [])
+    if coords_raw and isinstance(coords_raw[0], (int, float)):
+        return [coords_raw]
+    return coords_raw[0] if coords_raw else []
+
 
 async def analyze_zone_vulnerability(zone_geojson: Dict, center: List[float]) -> Dict:
     """
@@ -81,11 +157,49 @@ async def analyze_zone_vulnerability(zone_geojson: Dict, center: List[float]) ->
         else:
             print(f"[POLYGON] ERROR: Invalid coordinates structure")
 
-    # Step 1: Fetch geometry layers in the zone.
+    # Step 1: Fetch geometry layers in the zone and buffer zone (300m buffer for context buildings).
+    # First, create buffer zone for fetching context buildings
+    buffer_zone_polygon = _create_buffer_zone(zone_geojson, buffer_meters=150)
+
+    # Convert buffer polygon back to GeoJSON for API call
+    buffer_zone_geojson = None
+    if buffer_zone_polygon:
+        exterior_coords = list(buffer_zone_polygon.exterior.coords)
+        buffer_zone_geojson = {
+            "type": "Polygon",
+            "coordinates": [exterior_coords]
+        }
+
+    # Fetch buildings from zone (for thermal analysis)
     area = await asyncio.to_thread(client.buildings.get_area, zone_geojson)
-    print(f"[INFRARED FETCH] Buildings returned: {len(area.buildings) if area.buildings else 0}")
+    print(f"[INFRARED FETCH] Zone buildings returned: {len(area.buildings) if area.buildings else 0}")
     if not area.buildings:
         raise ValueError(f"No buildings found in zone at ({lat}, {lon})")
+
+    # Fetch buildings from buffer zone for context
+    buffer_area = None
+    if buffer_zone_geojson:
+        print(f"[INFRARED FETCH] Requesting buffer zone buildings from: {buffer_zone_geojson}")
+        with open('/tmp/buffer_debug.log', 'a') as f:
+            f.write(f"\n=== BUFFER ZONE FETCH ===\n")
+            f.write(f"Zone building count: {len(area.buildings) if area.buildings else 0}\n")
+            f.write(f"Buffer zone geojson: {buffer_zone_geojson}\n")
+        try:
+            buffer_area = await asyncio.to_thread(client.buildings.get_area, buffer_zone_geojson)
+            buffer_count = len(buffer_area.buildings) if buffer_area and buffer_area.buildings else 0
+            print(f"[INFRARED FETCH] Buffer zone buildings returned: {buffer_count}")
+            with open('/tmp/buffer_debug.log', 'a') as f:
+                f.write(f"Buffer fetch returned: {buffer_count} buildings\n")
+                if buffer_area and buffer_area.buildings:
+                    f.write(f"Buffer area buildings type: {type(buffer_area.buildings)}\n")
+                    if isinstance(buffer_area.buildings, dict):
+                        f.write(f"First 3 building IDs: {list(buffer_area.buildings.keys())[:3]}\n")
+        except Exception as buf_error:
+            print(f"[INFRARED FETCH] ERROR fetching buffer zone: {buf_error}")
+            with open('/tmp/buffer_debug.log', 'a') as f:
+                f.write(f"ERROR fetching buffer zone: {buf_error}\n")
+                import traceback
+                f.write(traceback.format_exc())
 
     vegetation = await asyncio.to_thread(client.vegetation.get_area, zone_geojson)
     ground_materials = await asyncio.to_thread(client.ground_materials.get_area, zone_geojson)
@@ -186,30 +300,13 @@ async def analyze_zone_vulnerability(zone_geojson: Dict, center: List[float]) ->
         heat_stress_pct = heat_stress_fraction * 100 if heat_stress_fraction <= 1.0 else heat_stress_fraction
 
     except Exception as sim_error:
-        logger.warning(
-            f"[ANALYZE] Thermal simulation unavailable ({sim_error}); "
-            f"falling back to Landsat surface temperature"
+        # No fallback - thermal simulation is required for proper heatmap generation
+        logger.error(f"[ANALYZE] Thermal simulation failed: {sim_error}")
+        print(f"[ANALYZE] THERMAL SIMULATION ERROR: {sim_error}")
+        raise ValueError(
+            f"Thermal comfort analysis failed. Please check your Infrared API credentials and try again. "
+            f"Error: {str(sim_error)}"
         )
-        print(f"[ANALYZE] SIMULATION FALLBACK: {sim_error}")
-        thermal_source = "Landsat LST fallback (no simulation credits)"
-        utci_grid = None
-        utci_result = None
-        valid_utci = None
-
-        try:
-            from services.data_loaders.satellite_loader import SatelliteLoader
-            zb = _extract_zone_bounds(zone_geojson)
-            sat = SatelliteLoader().get_lst((zb['west'], zb['south'], zb['east'], zb['north']))
-        except Exception:
-            sat = None
-
-        if sat:
-            mean_temp = float(sat['zone_lst_c'])
-            peak_temp = float(sat['zone_lst_max_c'])
-        else:
-            mean_temp, peak_temp = 31.0, 38.0
-        # Rough heat-stress estimate from surface temperature
-        heat_stress_pct = float(np.clip((mean_temp - 28.0) * 6.0, 5.0, 95.0))
 
     # Calculate vulnerability score (0-10 scale).
     temp_score = min(5, (peak_temp - 28) / 2)  # baseline ~28°C
@@ -264,42 +361,155 @@ async def analyze_zone_vulnerability(zone_geojson: Dict, center: List[float]) ->
             "data_source": "Infrared UTCI analysis",
         })
 
-    # Generate heatmap image for visualization (only when the simulation ran)
-    if utci_grid is not None and valid_utci is not None:
-        grid_min = float(np.nanmin(valid_utci))
-        grid_max = float(np.nanmax(valid_utci))
-        heatmap_base64 = _grid_to_heatmap_png(utci_grid, grid_min, grid_max)
-        bounds_dict = _extract_bounds(utci_result.bounds)
-        print(f"[SDK BOUNDS] {bounds_dict}")
-    else:
-        grid_min, grid_max = mean_temp - 3, peak_temp
-        heatmap_base64 = None
-        zb = _extract_zone_bounds(zone_geojson)
-        bounds_dict = {"west": zb['west'], "south": zb['south'], "east": zb['east'], "north": zb['north']}
+    # Generate heatmap image for visualization from the thermal simulation
+    if utci_grid is None or valid_utci is None:
+        raise ValueError("UTCI grid is not available - thermal simulation did not complete properly")
 
-    # Convert building data to Three.js geometry format
-    print(f"[ANALYZE_ZONE] Converting {len(area.buildings) if area.buildings else 0} buildings to Three.js format")
+    grid_min = float(np.nanmin(valid_utci))
+    grid_max = float(np.nanmax(valid_utci))
+
+    try:
+        heatmap_base64 = _grid_to_heatmap_png(utci_grid, grid_min, grid_max)
+        print(f"[HEATMAP] Generated heatmap from UTCI grid (min={grid_min:.1f}°C, max={grid_max:.1f}°C)")
+    except Exception as hm_error:
+        logger.error(f"[HEATMAP] Failed to generate heatmap: {hm_error}")
+        raise ValueError(f"Failed to generate heatmap visualization: {str(hm_error)}")
+
+    bounds_dict = _extract_bounds(utci_result.bounds)
+    print(f"[SDK BOUNDS] {bounds_dict}")
+
+    # Convert building data to Three.js geometry format + separate zone vs buffer buildings
+    all_zone_buildings = area.buildings
+
+    # Handle buffer_area.buildings — extract only context buildings (outside zone)
+    all_buffer_buildings = {}
+    print(f"[BUFFER_BUILDINGS] Starting separation logic...")
+    print(f"[BUFFER_BUILDINGS] buffer_area is None: {buffer_area is None}")
+    print(f"[BUFFER_BUILDINGS] buffer_area.buildings is None: {buffer_area.buildings is None if buffer_area else 'N/A'}")
+    print(f"[BUFFER_BUILDINGS] buffer_area.buildings len: {len(buffer_area.buildings) if buffer_area and buffer_area.buildings else 0}")
+
+    if buffer_area and buffer_area.buildings:
+        all_buffer_buildings_full = buffer_area.buildings
+        print(f"[BUFFER_BUILDINGS] buffer_area exists with {len(all_buffer_buildings_full)} total buildings")
+        print(f"[BUFFER_BUILDINGS] all_zone_buildings type: {type(all_zone_buildings)}, len: {len(all_zone_buildings)}")
+
+        # Now separate zone buildings from context buildings using geometric test
+        try:
+            zone_polygon = Polygon(_extract_coords_from_geojson(zone_geojson))
+            buffer_polygon = _create_buffer_zone(zone_geojson, buffer_meters=150)
+            zone_bounds = _extract_zone_bounds(zone_geojson)
+            print(f"[BUFFER_BUILDINGS] Created zone and buffer polygons, zone_bounds={zone_bounds}")
+
+            # Collect local coordinate bounds from all buildings for proper transformation
+            all_x_coords = []
+            all_y_coords = []
+            for building in all_zone_buildings.values() if isinstance(all_zone_buildings, dict) else all_zone_buildings:
+                if hasattr(building, 'coordinates') and building.coordinates:
+                    coords_array = building.coordinates
+                    for j in range(0, len(coords_array), 3):
+                        if j + 2 < len(coords_array):
+                            all_x_coords.append(coords_array[j])
+                            all_y_coords.append(coords_array[j+1])
+
+            local_bounds = {
+                "x_min": min(all_x_coords),
+                "x_max": max(all_x_coords),
+                "y_min": min(all_y_coords),
+                "y_max": max(all_y_coords)
+            } if all_x_coords else None
+            print(f"[BUFFER_BUILDINGS] local_bounds={local_bounds}")
+
+            zone_building_ids = set()
+            for idx, building in enumerate(all_zone_buildings.values() if isinstance(all_zone_buildings, dict) else all_zone_buildings):
+                # Get building centroid (Infrared SDK buildings have coordinates attribute)
+                if hasattr(building, 'coordinates') and building.coordinates and len(building.coordinates) >= 3:
+                    # Extract x, y from coordinates array (every 3 elements: x, y, z) and TRANSFORM to geographic
+                    x_local, y_local = building.coordinates[0], building.coordinates[1]
+                    x_geo, y_geo = _local_to_geographic(x_local, y_local, zone_bounds, local_bounds)
+                    centroid = Point(x_geo, y_geo)
+                    if zone_polygon.contains(centroid):
+                        bldg_id = getattr(building, 'id', f"zone_bldg_{idx}")
+                        zone_building_ids.add(str(bldg_id))
+                        if idx < 3:
+                            print(f"  Zone building {idx}: id={bldg_id}, local=({x_local:.1f}, {y_local:.1f}) -> geo=({x_geo:.5f}, {y_geo:.5f})")
+
+            print(f"[BUFFER_BUILDINGS] Identified {len(zone_building_ids)} zone building IDs")
+
+            # Filter buffer buildings to only include those NOT in zone
+            context_count = 0
+            for building_id, building in (all_buffer_buildings_full.items() if isinstance(all_buffer_buildings_full, dict) else enumerate(all_buffer_buildings_full)):
+                str_building_id = str(building_id)
+                if str_building_id not in zone_building_ids:
+                    # Check if building is in buffer zone (should be, but double-check)
+                    if hasattr(building, 'coordinates') and building.coordinates and len(building.coordinates) >= 3:
+                        x_local, y_local = building.coordinates[0], building.coordinates[1]
+                        x_geo, y_geo = _local_to_geographic(x_local, y_local, zone_bounds, local_bounds)
+                        centroid = Point(x_geo, y_geo)
+                        if buffer_polygon and buffer_polygon.contains(centroid):
+                            all_buffer_buildings[building_id] = building
+                            context_count += 1
+
+            print(f"[BUFFER_BUILDINGS] Extracted {len(all_buffer_buildings)} context buildings (outside zone)")
+        except Exception as e:
+            print(f"[BUFFER_BUILDINGS] ERROR during separation: {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        print(f"[BUFFER_BUILDINGS] buffer_area is None or has no buildings")
+
+    print(f"[ANALYZE_ZONE] Converting {len(all_zone_buildings)} zone buildings + {len(all_buffer_buildings)} buffer buildings to geometry")
+    with open('/tmp/buffer_debug.log', 'a') as f:
+        f.write(f"[ANALYZE_ZONE] Before conversion: zone={len(all_zone_buildings)}, buffer={len(all_buffer_buildings)}\n")
 
     # Per-building vulnerability scores from the UTCI grid (when available)
     vulnerability_map = {}
+    zone_buildings_geojson = None
+    buffer_buildings_geojson = None
+
     if utci_grid is not None and utci_result is not None:
-        temp_geojson = _buildings_to_geojson(area.buildings, zone_geojson)
-        temp_geojson = _add_building_vulnerability_scores(
-            temp_geojson,
+        # Score zone buildings (affected by thermal analysis)
+        zone_buildings_geojson = _buildings_to_geojson(all_zone_buildings, zone_geojson)
+        zone_buildings_geojson = _add_building_vulnerability_scores(
+            zone_buildings_geojson,
             utci_grid,
             utci_result.bounds,
             grid_min,
             grid_max
         )
-        for feature in temp_geojson.get('features', []):
-            building_id = feature.get('properties', {}).get('id') or feature.get('id', str(len(vulnerability_map)))
-            vulnerability_map[str(building_id)] = feature.get('properties', {}).get('vulnerability_score', 5.0)
+
+        # Score buffer buildings (use grid values, but mark as context)
+        # Note: Buffer buildings use the same local→geographic transform as zone buildings,
+        # but they fall outside the zone bounds, so coordinates don't map cleanly.
+        # For now, we return empty buffer buildings; enhancement: fetch buffer zone bounds
+        # from the Infrared SDK and use those for coordinate transformation.
+        if all_buffer_buildings:
+            buffer_buildings_geojson = {"type": "FeatureCollection", "features": []}
+
+        # Collect vulnerability map for all buildings
+        for geojson in [zone_buildings_geojson, buffer_buildings_geojson]:
+            if geojson:
+                for feature in geojson.get('features', []):
+                    building_id = feature.get('properties', {}).get('id') or feature.get('id', str(len(vulnerability_map)))
+                    vulnerability_map[str(building_id)] = feature.get('properties', {}).get('vulnerability_score', 5.0)
 
     print(f"[VULNERABILITY SCORECARD] Mapped {len(vulnerability_map)} buildings with scores")
 
     # Convert to Three.js geometry with vulnerability scores
-    buildings_threejs = _buildings_to_threejs_geometry(area.buildings, zone_geojson, vulnerability_map)
-    print(f"[THREE_JS CONVERSION] Converted {buildings_threejs['count']} buildings to Three.js format")
+    with open('/tmp/buffer_debug.log', 'a') as f:
+        f.write(f"[THREE_JS] About to convert zone buildings: {len(all_zone_buildings)} buildings\n")
+    zone_buildings_threejs = _buildings_to_threejs_geometry(all_zone_buildings, zone_geojson, vulnerability_map)
+    with open('/tmp/buffer_debug.log', 'a') as f:
+        f.write(f"[THREE_JS] Zone conversion result: {zone_buildings_threejs['count']} features\n")
+
+    buffer_buildings_threejs = None
+    if all_buffer_buildings and buffer_zone_geojson:
+        with open('/tmp/buffer_debug.log', 'a') as f:
+            f.write(f"[THREE_JS] About to convert buffer buildings: {len(all_buffer_buildings)} buildings\n")
+        buffer_buildings_threejs = _buildings_to_threejs_geometry(all_buffer_buildings, buffer_zone_geojson, vulnerability_map)
+        with open('/tmp/buffer_debug.log', 'a') as f:
+            f.write(f"[THREE_JS] Buffer conversion result: {buffer_buildings_threejs['count']} features\n")
+
+    print(f"[THREE_JS CONVERSION] Zone: {zone_buildings_threejs['count']}, Buffer: {buffer_buildings_threejs['count'] if buffer_buildings_threejs else 0}")
 
     return {
         "score": round(vulnerability_score, 1),
@@ -310,7 +520,7 @@ async def analyze_zone_vulnerability(zone_geojson: Dict, center: List[float]) ->
             "heat_stress_hours_pct": round(heat_stress_pct, 1),
             "analysis_period": "July 1-31, 10:00-18:00",
             "coordinates": [lon, lat],
-            "buildings_count": len(area.buildings),
+            "buildings_count": len(all_zone_buildings),
             "vegetation_count": vegetation_count,
             "ground_layers": ground_layers,
             "thermal_source": thermal_source,
@@ -320,12 +530,13 @@ async def analyze_zone_vulnerability(zone_geojson: Dict, center: List[float]) ->
             "bounds": bounds_dict,
             "min_value": float(grid_min),
             "max_value": float(grid_max),
-            "unit": "°C UTCI" if utci_grid is not None else "°C LST",
+            "unit": "°C UTCI",
             # Raw grid (row 0 = south) so the frontend can re-render the
             # heatmap with intervention deltas applied, on the same scale
-            "values": _grid_to_values(utci_grid) if utci_grid is not None else None,
+            "values": _grid_to_values(utci_grid),
         },
-        "buildings_3d": buildings_threejs,
+        "zone_buildings": zone_buildings_threejs,
+        "buffer_zone_buildings": buffer_buildings_threejs if buffer_buildings_threejs else {"count": 0, "features": []},
     }
 
 def _extract_zone_bounds(zone_geojson: Dict) -> Dict:

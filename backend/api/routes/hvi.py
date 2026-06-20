@@ -77,7 +77,7 @@ async def analyze_zone_hvi(request: HVIAnalysisRequest):
         if not thermal_analysis:
             raise ValueError("Thermal analysis did not return data")
 
-        buildings_geojson = thermal_analysis.get("buildings_3d", {})
+        buildings_geojson = thermal_analysis.get("zone_buildings", {})
         if not buildings_geojson or not buildings_geojson.get("features"):
             raise ValueError("No buildings found in thermal analysis")
 
