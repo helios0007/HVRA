@@ -76,12 +76,22 @@ cd frontend && npm run dev                         # :5173
 The urban tool works on its own; only the **Building Analysis** tab needs :8001.
 
 ## Pulling her latest changes
+Her repo is registered as the `building-upstream` remote, so:
 ```
-git subtree pull --prefix=building-level https://github.com/gaellehabib24/HVRA_building_level main --squash
+git subtree pull --prefix=building-level building-upstream main --squash
 ```
-Golden rule: **don't edit files under `building-level/`** — keep all glue in
-`frontend/` so subtree pulls never conflict. Deep-grounding fields (passing our
-UHI/LST into her pipeline) should be added by her, in her repo, then pulled.
+(First-time on another machine: `git remote add building-upstream https://github.com/gaellehabib24/HVRA_building_level.git`.)
+
+Two kinds of our changes interact with a pull:
+1. **Backend hooks inside `building-level/`** — the gated `[urban-grounding]` /
+   `[ollama-fix]` edits. A pull *merges*; if she touched the same files you may get
+   a conflict — keep her version, then `grep -rn "\[urban-grounding\]\|\[ollama-fix\]"`
+   in history and re-apply the small blocks.
+2. **Frontend viewer components** — these are **copies** in
+   `frontend/src/components/building/`; a subtree pull does NOT touch them.
+   If she changes those components, re-copy them from
+   `building-level/hvra/frontend/src/components/` (and re-apply the one Viewer3D
+   line: API base → `/bapi`).
 
 ## Building tab — full native port (done)
 Her whole results UI now runs inside our **Building Analysis** tab, dark-themed:
