@@ -58,6 +58,7 @@ def run_pipeline(
     income_category: str,
     mobility_limitations: bool,
     output_dir: str,
+    urban_uhi_delta: float | None = None,  # [urban-grounding]
 ) -> dict[str, Any]:
     """
     Run the Stage 2 calculation engine end-to-end for one building.
@@ -141,6 +142,16 @@ def run_pipeline(
 
     # ── 6. UHI correction ────────────────────────────────────────────────────
     neighbourhood, uhi_delta = get_uhi_correction(lat, lon)
+    # [urban-grounding] If the urban tool measured a UHI delta for this zone,
+    # use it instead of the generic barri-table average — building thermal
+    # scores then reflect our actual site analysis, not a city default.
+    if urban_uhi_delta is not None:
+        logger.info(
+            "UHI override: urban tool measured +%.1f°C (was barri %s +%.1f°C)",
+            urban_uhi_delta, neighbourhood, uhi_delta,
+        )
+        uhi_delta = float(urban_uhi_delta)
+        neighbourhood = f"{neighbourhood} · urban-grounded"
     logger.info(
         "UHI: neighbourhood=%s, delta=+%.1f°C applied to all T_outdoor values",
         neighbourhood, uhi_delta,

@@ -1,0 +1,45 @@
+.wall-section {
+  margin-top: 0.75rem;
+  background: #fafaf9;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem;
+  overflow-x: auto;
+}
+
+.ws-panels {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.ws-panel {
+  min-width: 0;
+}
+
+.ws-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0 0 2px 0;
+}
+
+.ws-arrow {
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  transform: rotate(90deg);
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.ws-annotation {
+  font-size: 0.7rem;
+  color: #92400e;
+  font-style: italic;
+  margin: 6px 0 0 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}

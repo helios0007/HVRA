@@ -1,5 +1,5 @@
 /* ============================================================
-   Urban Heat Analyzer — design system
+   OASIS — Overheating Assessment System for Intervention Strategies — design system
    ============================================================ */
 
 :root {
@@ -64,6 +64,9 @@ body {
   font-weight: 700;
   letter-spacing: 0.2px;
   color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
 
 .app-subtitle {
@@ -151,7 +154,8 @@ body {
   gap: 7px;
 }
 
-.tab-icon { font-size: 14px; }
+.tab-icon { display: inline-flex; align-items: center; }
+.app-logo svg, .tab-icon svg, .toggle-card-icon svg, .bldg-drill-icon svg, .lp-nav-brand svg { display: block; }
 
 .tab:hover:not(:disabled) {
   color: var(--text-primary);
@@ -1297,8 +1301,51 @@ body {
   border-color: var(--card-accent);
   background: color-mix(in srgb, var(--card-accent) 12%, var(--bg-tertiary, #1a1e27));
 }
+
+/* Drill-down CTA: appears in the 3D Explore / Interventions dashboards when a
+   building is selected — routes to the building-level (IFC) analysis. */
+.bldg-drill-card {
+  --drill-accent: #c084fc;
+  margin-bottom: 16px;
+  padding: 14px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid color-mix(in srgb, var(--drill-accent) 45%, var(--border-subtle, #2a2f3a));
+  background: color-mix(in srgb, var(--drill-accent) 10%, var(--bg-tertiary, #1a1e27));
+}
+.bldg-drill-head { display: flex; align-items: flex-start; gap: 8px; }
+.bldg-drill-icon { display: inline-flex; align-items: center; color: var(--drill-accent, #c084fc); }
+.bldg-drill-titles { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.bldg-drill-title { font-size: 12.5px; font-weight: 700; color: var(--text-primary, #f1f5f9); }
+.bldg-drill-sub {
+  font-size: 11.5px; color: var(--text-secondary, #cbd5e1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bldg-drill-clear {
+  background: none; border: none; color: var(--text-secondary, #cbd5e1);
+  font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px;
+}
+.bldg-drill-clear:hover { color: var(--text-primary, #f1f5f9); }
+.bldg-drill-text {
+  font-size: 12px; color: var(--text-secondary, #cbd5e1);
+  line-height: 1.5; margin: 10px 0 12px;
+}
+.bldg-drill-btn {
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--drill-accent);
+  color: #1a1023;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.1s ease;
+}
+.bldg-drill-btn:hover { filter: brightness(1.08); }
+.bldg-drill-btn:active { transform: translateY(1px); }
+
 .toggle-card-top { display: flex; align-items: flex-start; gap: 8px; }
-.toggle-card-icon { font-size: 16px; line-height: 1; }
+.toggle-card-icon { display: inline-flex; align-items: center; color: var(--card-accent, #fb923c); }
 .toggle-card-titles { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .toggle-card-title { font-size: 12.5px; font-weight: 700; color: var(--text-primary, #f1f5f9); }
 .toggle-card-sub { font-size: 10.5px; line-height: 1.35; color: var(--text-muted, #8a94a6); }
@@ -1640,7 +1687,7 @@ body {
   background: rgba(12,14,19,0.8); backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--lp-line);
 }
-.lp-nav-brand { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.04em; }
+.lp-nav-brand { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.04em; display: inline-flex; align-items: center; gap: 7px; }
 .lp-nav-links { display: flex; align-items: center; gap: 26px; font-size: 0.88rem; color: var(--lp-mut); }
 .lp-nav-links a:hover { color: var(--lp-fg); }
 .lp-nav-btn {

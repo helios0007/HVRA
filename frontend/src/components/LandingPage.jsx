@@ -2,6 +2,8 @@
 // the jury. Minimal but structured: a thin nav, numbered sections, and the
 // methodology surfaced. Self-contained (no live data), renders instantly.
 
+import { IconOasis } from './Icons';
+
 // Schematic persona apartment — a tiny static version of the coupled section
 function PersonaThumb() {
   return (
@@ -83,7 +85,7 @@ export default function LandingPage({ onLaunch }) {
     <div className="landing">
       {/* nav */}
       <nav className="lp-nav">
-        <span className="lp-nav-brand">▦ HVRA</span>
+        <span className="lp-nav-brand"><IconOasis size={18} /> OASIS</span>
         <div className="lp-nav-links">
           <a href="#the-subject">Subject</a>
           <a href="#method">Method</a>
@@ -94,7 +96,7 @@ export default function LandingPage({ onLaunch }) {
 
       {/* hero */}
       <header className="lp-hero">
-        <span className="lp-eyebrow">Urban Heat Triage · demo city Barcelona</span>
+        <span className="lp-eyebrow">OASIS · demo city Barcelona</span>
         <h1 className="lp-title">Who gets protected<br />from the heat first?</h1>
         <p className="lp-sub">
           A human-centred instrument that finds the most heat-vulnerable buildings, decides whether
@@ -194,7 +196,7 @@ export default function LandingPage({ onLaunch }) {
       </section>
 
       <footer className="lp-footer">
-        <span>HVRA — Heat Vulnerability Risk Analyzer</span>
+        <span>OASIS — Overheating Assessment System for Intervention Strategies</span>
         <span>IAAC Research Studio · Term III</span>
         <a href="https://github.com/helios0007/HVRA" target="_blank" rel="noreferrer">GitHub ↗</a>
       </footer>

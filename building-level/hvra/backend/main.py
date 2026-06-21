@@ -46,6 +46,10 @@ async def upload_building(
     ac_access: str = Form(...),
     income_category: str = Form(...),
     mobility_limitations: str = Form(...),
+    # [urban-grounding] optional UHI delta (°C) measured by the urban tool for
+    # this zone. When provided it overrides the barri-table lookup so building
+    # thermal scores use our actual analysis. Absent → her standalone behaviour.
+    urban_uhi_delta: float | None = Form(None),
 ):
     if not ifc_file.filename.lower().endswith(".ifc"):
         raise HTTPException(
@@ -89,6 +93,7 @@ async def upload_building(
             income_category=income_category,
             mobility_limitations=mobility_bool,
             output_dir=job_dir,
+            urban_uhi_delta=urban_uhi_delta,  # [urban-grounding]
         )
 
         # Run async LLM stages (Stage 3 + 4b) directly in the async context.
@@ -146,6 +151,7 @@ async def upload_building(
             "ac_access": ac_access,
             "income_category": income_category,
             "mobility_limitations": mobility_limitations,
+            "urban_uhi_delta": urban_uhi_delta,  # [urban-grounding] echo for transparency
         },
     }
 

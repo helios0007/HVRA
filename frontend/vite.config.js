@@ -7,8 +7,12 @@ export default defineConfig({
   optimizeDeps: {
     esbuildOptions: {
       target: 'esnext'
-    }
+    },
+    // @thatopen/components + web-ifc use dynamic WASM imports — don't pre-bundle.
+    exclude: ['@thatopen/components', 'web-ifc'],
   },
+  // web-ifc.wasm is fetched at runtime by ifcLoader.setup() (the 3D IFC viewer).
+  assetsInclude: ['**/*.wasm'],
   server: {
     headers: {
       'Cross-Origin-Embedder-Policy': 'unsafe-none',

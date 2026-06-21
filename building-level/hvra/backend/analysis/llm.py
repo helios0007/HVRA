@@ -85,6 +85,80 @@ async def _create_with_retry(client, sem: "asyncio.Semaphore", **kwargs):
             raise
 
 
+def _ollama_format_schema(system: str):
+    """
+    [ollama-fix] Pick the Ollama structured-output JSON Schema for the call from
+    the stage's system prompt. Returns a schema dict (grammar-constrains the model
+    to exactly these keys) or "json" as a safe fallback for unknown prompts.
+    """
+    if "shortlist" in system:  # Stage 4b — Retrofit Recommender
+        return {
+            "type": "object",
+            "properties": {
+                "shortlist": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "strategy_id": {"type": "string"},
+                            "rank": {"type": "integer"},
+                            "justification": {"type": "string"},
+                            "delta_T_expected_C": {"type": "number"},
+                            "cost_eur_m2": {"type": "number"},
+                            "carbon_kgCO2_m2": {"type": "number"},
+                            "feasibility_note": {"type": "string"},
+                            "literature_source": {"type": "string"},
+                        },
+                        "required": [
+                            "strategy_id", "rank", "justification",
+                            "delta_T_expected_C", "cost_eur_m2", "carbon_kgCO2_m2",
+                            "feasibility_note", "literature_source",
+                        ],
+                    },
+                }
+            },
+            "required": ["shortlist"],
+        }
+    if "key_factors" in system:  # Stage 3 — Building Interpreter
+        return {
+            "type": "object",
+            "properties": {
+                "diagnosis": {"type": "string"},
+                "key_factors": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["diagnosis", "key_factors"],
+        }
+    return "json"
+
+
+def _ollama_user_reminder(system: str) -> str:
+    """
+    [ollama-fix] A terminal user-turn reminder. Structured outputs guarantee the
+    *keys*, but small local models then satisfy the schema lazily (e.g. diagnosis
+    = "moderate", copied from risk_level). This pushes them to fill each field
+    with substance specific to THIS room. Stage-aware so each stage gets the right
+    instruction.
+    """
+    if "shortlist" in system:  # Stage 4b
+        return (
+            "\n\n---\nFor each shortlisted strategy write a justification of 1-2 full "
+            "sentences referencing THIS room's orientation, WWR, floor and occupant, "
+            "and a concrete feasibility_note. Pick strategy_ids only from "
+            "eligible_strategies. Do not echo input keys or invent data."
+        )
+    if "key_factors" in system:  # Stage 3
+        return (
+            "\n\n---\nWrite the diagnosis as 3-5 FULL SENTENCES naming this room's "
+            "façade orientation, floor level, ventilation, occupant vulnerability and "
+            "the applied UHI. key_factors: 2-4 short phrases. Do not answer with a "
+            "single word and do not echo input keys."
+        )
+    return (
+        "\n\n---\nReturn ONLY the JSON object matching the schema in the system "
+        "instructions — describe THIS input, do not echo input fields or invent data."
+    )
+
+
 async def _ollama_chat(sem: "asyncio.Semaphore", system: str, user: str, max_tokens: int) -> str:
     """
     Call a local Ollama model via /api/chat. format="json" forces valid JSON
@@ -92,14 +166,25 @@ async def _ollama_chat(sem: "asyncio.Semaphore", system: str, user: str, max_tok
     """
     import httpx
 
+    # [ollama-fix] Under the bare format="json" mode, local models (qwen2.5:7b,
+    # llama3.1:8b) *continue* the large input JSON — echoing its fields and even
+    # inventing weather/date data — instead of following the system schema, so
+    # diagnosis/shortlist come back empty (0/12 rooms). Fix: use Ollama structured
+    # outputs — pass the concrete JSON Schema as `format` so decoding is grammar-
+    # constrained to exactly the requested keys (extra/hallucinated keys become
+    # impossible). The schema is chosen from the system prompt's stage. Verified
+    # 0/12 → full output with qwen2.5:7b. Affects only the Ollama branch.
+    fmt = _ollama_format_schema(system)
+    user_steered = user + _ollama_user_reminder(system)
+
     payload = {
         "model": _ollama_model(),
         "messages": [
             {"role": "system", "content": system},
-            {"role": "user", "content": user},
+            {"role": "user", "content": user_steered},
         ],
         "stream": False,
-        "format": "json",
+        "format": fmt,
         "options": {"num_predict": max_tokens, "temperature": 0.2},
     }
     try:

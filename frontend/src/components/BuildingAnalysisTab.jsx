@@ -2,49 +2,27 @@
 // two tools read as one. It drives the teammate's FastAPI pipeline (proxied at
 // /bapi → :8001) but renders everything in our dark theme.
 //
+// Results view ports her full UI natively: an interactive 3D IFC viewer
+// (rooms colored by heat risk, click-to-select, before/after retrofit) beside a
+// room portfolio + room panel (diagnosis, score breakdown, overheating hours,
+// and retrofit cards with wall-section / louver diagrams that highlight the
+// affected elements in the 3D model). Components live in ./building/ — copied
+// from her vendored frontend so building-level/ stays untouched for subtree pulls.
+//
 // Grounding: when a building is selected in the urban tool, its lat/lon and
-// construction era pre-fill the intake form, and its HVI/drivers are shown as
-// context — so the room-level analysis is anchored to the urban diagnosis.
+// construction era pre-fill the intake form, its measured UHI is fed into her
+// pipeline, and its HVI/drivers are shown as context.
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { uploadBuilding, getShortlist } from '../services/buildingLevelAPI';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { uploadBuilding } from '../services/buildingLevelAPI';
 import { getHVIColorHex } from '../utils/hviColors';
+import { urbanGroundingContext } from '../utils/urbanGrounding';
+import Viewer3D from './building/Viewer3D';
+import RoomPanel from './building/RoomPanel';
+import PortfolioView from './building/PortfolioView';
+import ErrorBoundary from './building/ErrorBoundary';
 import '../styles/BuildingAnalysisTab.css';
-
-// Strategy display names (mirrors her strategyMeta.js — fallback prettifies key)
-const STRATEGY_LABELS = {
-  external_shading_louvers: 'External louvers / brise-soleil',
-  operable_external_sunscreen: 'Operable external sunscreen',
-  window_external_shutters: 'External shutters (persianes)',
-  green_pergola: 'Climbing vegetation screen (green façade)',
-  window_enlargement: 'Window enlargement',
-  interior_opening_improvement: 'Transom / interior opening',
-  stack_effect_roof_vent: 'Stack-effect roof vent',
-  external_wall_insulation_etics: 'External wall insulation — ETICS',
-  internal_wall_insulation: 'Internal wall insulation',
-  roof_insulation: 'Roof insulation membrane',
-  cool_roof_coating: 'Cool roof reflective coating',
-  solar_control_glazing: 'Solar control glazing',
-  cool_facade_paint: 'Cool / reflective façade paint',
-  phase_change_materials: 'Phase-change materials (PCM)',
-  internal_blinds: 'Internal roller blinds',
-  night_purge_ventilation: 'Night purge ventilation',
-  cross_ventilation_behaviour: 'Cross-ventilation protocol',
-  courtyard_greening: 'Courtyard greening',
-  street_tree_canopy: 'Street tree canopy',
-  shared_cooling_refuge: 'Shared cooling refuge',
-};
-
-const RISK_COLOR = {
-  Critical: '#b10026',
-  High: '#fc4e2a',
-  Moderate: '#fdae61',
-  Safe: '#66bd63',
-};
-
-const prettyKey = (k) => String(k || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-const strategyName = (s) =>
-  s?.name || s?.title || STRATEGY_LABELS[s?.strategy || s?.id || s?.key] || prettyKey(s?.strategy || s?.id || s?.key || s);
+import '../styles/buildingViewer.css';
 
 const EMPTY_FORM = {
   construction_year: '', roof_colour: '', heritage_protection: '', shutter_boxes: '',
@@ -84,11 +62,15 @@ function eraToBracket(feature) {
   return '';
 }
 
-export default function BuildingAnalysisTab({ selectedBuilding }) {
+export default function BuildingAnalysisTab({ selectedBuilding, urbanAnalysis }) {
   const grounded = featureLonLat(selectedBuilding);
   const groundHvi = selectedBuilding?.properties?.hvi_score ?? selectedBuilding?.properties?.vulnerability_score;
   const groundDrivers = selectedBuilding?.properties?.drivers
     || selectedBuilding?.properties?.vulnerability_drivers || [];
+
+  // Deep grounding: the urban tool's measured UHI delta for this zone, fed into
+  // her pipeline so room thermal scores use our analysis, not a city average.
+  const urban = useMemo(() => urbanGroundingContext(urbanAnalysis), [urbanAnalysis]);
 
   const [lat, setLat] = useState(grounded ? grounded[1] : 41.3851);
   const [lon, setLon] = useState(grounded ? grounded[0] : 2.1734);
@@ -97,8 +79,12 @@ export default function BuildingAnalysisTab({ selectedBuilding }) {
   const [state, setState] = useState('idle'); // idle | submitting | done | error
   const [errorMsg, setErrorMsg] = useState('');
   const [result, setResult] = useState(null);
+
+  // Results-view state (mirrors her App.jsx)
   const [selectedRoom, setSelectedRoom] = useState(null);
-  const [shortlist, setShortlist] = useState(null);
+  const [viewerTab, setViewerTab] = useState('portfolio'); // portfolio | room
+  const [beforeAfter, setBeforeAfter] = useState('before');
+  const viewerRef = useRef(null);
 
   // Pre-fill location + era from the selected urban building (grounding).
   useEffect(() => {
@@ -108,6 +94,25 @@ export default function BuildingAnalysisTab({ selectedBuilding }) {
     const bracket = eraToBracket(selectedBuilding);
     if (bracket) setForm((p) => ({ ...p, construction_year: bracket }));
   }, [selectedBuilding]);
+
+  // ── 3D highlight bridge (RetrofitCard / RoomPanel → Viewer3D) ──────────────
+  const handleRoomSelect = useCallback((room) => {
+    setSelectedRoom(room);
+    setViewerTab('room');
+  }, []);
+  const handleStrategyHighlight = useCallback((globalIds, hexColor, roomGlobalId) => {
+    viewerRef.current?.highlightElements(globalIds, hexColor, true, { roomGlobalId });
+  }, []);
+  const handleHighlightClear = useCallback(() => {
+    viewerRef.current?.clearHighlights();
+  }, []);
+  const handleStrategyHighlightGroups = useCallback((groups, opts) => {
+    viewerRef.current?.highlightGroups(groups, true, opts);
+  }, []);
+  const handleInspectRoomToggle = useCallback((roomGlobalId, on, riskLevel) => {
+    if (on) viewerRef.current?.highlightInspectedRoom(roomGlobalId, riskLevel);
+    else viewerRef.current?.clearInspectedRoomHighlight();
+  }, []);
 
   const setField = (e) => setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
 
@@ -136,42 +141,34 @@ export default function BuildingAnalysisTab({ selectedBuilding }) {
     fd.append('lat', String(lat));
     fd.append('lon', String(lon));
     Object.entries(form).forEach(([k, v]) => fd.append(k, v));
+    // Deep grounding: pass our measured UHI delta so her pipeline overrides its
+    // barri-table default. Omitted when no urban analysis is loaded → she falls
+    // back to her own lookup (standalone behaviour unchanged).
+    if (urban.uhiDelta != null) fd.append('urban_uhi_delta', String(urban.uhiDelta));
     try {
       const data = await uploadBuilding(fd);
       setResult(data);
-      setState('done');
       setSelectedRoom(null);
-      getShortlist(data.job_id).then(setShortlist).catch(() => setShortlist(null));
+      setViewerTab('portfolio');
+      setBeforeAfter('before');
+      setState('done');
     } catch (err) {
       setErrorMsg(err.message || 'Could not reach the building-level backend (is it running on :8001?).');
       setState('error');
     }
   };
 
-  const reset = () => { setResult(null); setSelectedRoom(null); setShortlist(null); setState('idle'); };
+  const reset = () => {
+    setResult(null); setSelectedRoom(null); setViewerTab('portfolio');
+    setBeforeAfter('before'); setState('idle');
+  };
 
-  const sortedRooms = useMemo(
-    () => (result?.rooms ? [...result.rooms].sort((a, b) => (b.composite_score ?? 0) - (a.composite_score ?? 0)) : []),
-    [result]
-  );
-
-  const roomShortlist = useCallback((room) => {
-    const inline = room?.ai_outputs?.shortlist || room?.shortlist;
-    if (Array.isArray(inline) && inline.length) return inline;
-    if (Array.isArray(shortlist)) {
-      const match = shortlist.find((s) => s.room_id === room?.room_id);
-      return match?.shortlist || match?.strategies || [];
-    }
-    return [];
-  }, [shortlist]);
-
-  // ---------------- Results view ----------------
+  // ---------------- Results view (full native port) ----------------
   if (state === 'done' && result) {
-    const room = selectedRoom;
     return (
-      <div className="ba-results">
-        <div className="ba-results-head">
-          <div>
+      <div className="ba-viewer">
+        <div className="ba-viewer-head">
+          <div className="ba-viewer-meta">
             <h3>Building analysis · {result.room_count} rooms</h3>
             <p className="ba-meta">
               {result.neighbourhood && <>{result.neighbourhood} · </>}
@@ -180,66 +177,68 @@ export default function BuildingAnalysisTab({ selectedBuilding }) {
               {result.warnings?.length > 0 && ` · ${result.warnings.length} warning(s)`}
             </p>
           </div>
-          <button className="btn-secondary" onClick={reset}>New assessment</button>
-        </div>
-
-        <div className="ba-results-grid">
-          <div className="ba-roomlist">
-            <h4 className="section-title">Rooms by heat risk</h4>
-            <table className="ba-table">
-              <thead><tr><th>#</th><th>Room</th><th>Fl.</th><th>Risk</th><th>Score</th></tr></thead>
-              <tbody>
-                {sortedRooms.map((r, i) => {
-                  const risk = r.thermal_scores?.risk_level;
-                  const sel = room?.room_id === r.room_id;
-                  return (
-                    <tr key={r.room_id || i} className={sel ? 'sel' : ''} onClick={() => setSelectedRoom(r)}>
-                      <td>{i + 1}</td>
-                      <td><span className="ba-room-name">{r.room_name || '—'}</span><span className="ba-room-type">{r.room_type}</span></td>
-                      <td>{r.floor ?? '—'}</td>
-                      <td><span className="ba-risk" style={{ background: RISK_COLOR[risk] || '#888' }}>{risk || '—'}</span></td>
-                      <td className="ba-score">{r.composite_score != null ? r.composite_score.toFixed(2) : '—'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="ba-roomdetail">
-            {!room && <p className="ba-hint">Select a room to see its diagnosis and top retrofit strategies.</p>}
-            {room && (
-              <>
-                <h4 className="section-title">{room.room_name} <span className="section-hint">· {room.room_type}</span></h4>
-                <div className="ba-room-stats">
-                  <span className="ba-risk" style={{ background: RISK_COLOR[room.thermal_scores?.risk_level] || '#888' }}>
-                    {room.thermal_scores?.risk_level || '—'}
-                  </span>
-                  {room.composite_score != null && <span className="ba-chip">score {room.composite_score.toFixed(2)}</span>}
-                  {room.area_m != null && <span className="ba-chip">{room.area_m} m²</span>}
-                  {room.facades?.[0]?.orientation && <span className="ba-chip">{room.facades[0].orientation}</span>}
-                </div>
-                {room.ai_outputs?.diagnosis && <p className="ba-diagnosis">{room.ai_outputs.diagnosis}</p>}
-                <h4 className="section-title">Recommended retrofits</h4>
-                {roomShortlist(room).length === 0 && <p className="ba-hint">No shortlist returned for this room.</p>}
-                {roomShortlist(room).map((s, i) => (
-                  <div key={i} className="ba-strategy">
-                    <div className="ba-strategy-head">
-                      <span className="ba-strategy-rank">{i + 1}</span>
-                      <span className="ba-strategy-name">{strategyName(s)}</span>
-                    </div>
-                    {(s.reason || s.rationale || s.why) && <p className="ba-strategy-why">{s.reason || s.rationale || s.why}</p>}
-                  </div>
-                ))}
-              </>
-            )}
+          <div className="ba-viewer-actions">
+            <div className="ba-ba-toggle">
+              <button className={beforeAfter === 'before' ? 'active' : ''} onClick={() => setBeforeAfter('before')}>Before</button>
+              <button className={beforeAfter === 'after' ? 'active' : ''} onClick={() => setBeforeAfter('after')}>After retrofit</button>
+            </div>
+            <button className="btn-secondary" onClick={reset}>New assessment</button>
           </div>
         </div>
 
-        <p className="ba-foot">
-          Interactive 3D IFC viewer (rooms highlighted on the model, before/after retrofit) is available in
-          the building-level tool and is the next piece to bring into this view.
-        </p>
+        <div className="ba-viewer-body">
+          <aside className="ba-viewer-sidebar">
+            <div className="ba-viewer-tabs">
+              <button className={viewerTab === 'portfolio' ? 'active' : ''} onClick={() => setViewerTab('portfolio')}>
+                All rooms ({result.rooms.length})
+              </button>
+              <button className={viewerTab === 'room' ? 'active' : ''} onClick={() => setViewerTab('room')} disabled={!selectedRoom}>
+                Room detail
+              </button>
+            </div>
+            <div className="ba-viewer-sidecontent">
+              {viewerTab === 'portfolio' && (
+                <PortfolioView rooms={result.rooms} selectedRoom={selectedRoom} onSelectRoom={handleRoomSelect} />
+              )}
+              {viewerTab === 'room' && selectedRoom && (
+                <RoomPanel
+                  room={selectedRoom}
+                  allRooms={result.rooms}
+                  beforeAfter={beforeAfter}
+                  roofIds={result.roof_element_ids ?? []}
+                  windDeg={result.prevailing_wind_deg}
+                  onInspectRoomToggle={handleInspectRoomToggle}
+                  onStrategyHighlight={handleStrategyHighlight}
+                  onStrategyHighlightGroups={handleStrategyHighlightGroups}
+                  onHighlightClear={handleHighlightClear}
+                />
+              )}
+              {viewerTab === 'room' && !selectedRoom && (
+                <p className="ba-hint">Click a room in the 3D viewer or the list to see its detail.</p>
+              )}
+            </div>
+          </aside>
+
+          <main className="ba-viewer-main">
+            <ErrorBoundary>
+              <Viewer3D
+                ref={viewerRef}
+                key={result.job_id}
+                jobId={result.job_id}
+                rooms={result.rooms}
+                selectedRoom={selectedRoom}
+                onRoomSelect={handleRoomSelect}
+                beforeAfter={beforeAfter}
+              />
+            </ErrorBoundary>
+            <div className="ba-viewer-legend">
+              <span className="leg critical">Critical</span>
+              <span className="leg high">High</span>
+              <span className="leg moderate">Moderate</span>
+              <span className="leg safe">Safe</span>
+            </div>
+          </main>
+        </div>
       </div>
     );
   }
@@ -249,21 +248,28 @@ export default function BuildingAnalysisTab({ selectedBuilding }) {
     <form className="ba-form" onSubmit={submit}>
       <div className="ba-form-intro">
         <h3>Building-level analysis</h3>
-        <p>Upload an IFC model for room-by-room heat-vulnerability diagnosis and retrofit strategies.</p>
+        <p>Upload an IFC model for room-by-room heat-vulnerability diagnosis, retrofit strategies, and an interactive 3D model.</p>
       </div>
 
-      {grounded ? (
+      {grounded || urban.uhiDelta != null ? (
         <div className="ba-grounding">
           <span className="ba-grounding-tag">Grounded in urban analysis</span>
           <span>
-            Building at {lat.toFixed(5)}, {lon.toFixed(5)}
+            {grounded
+              ? <>Building at {lat.toFixed(5)}, {lon.toFixed(5)}</>
+              : <>Using this zone's urban heat analysis</>}
             {groundHvi != null && <> · <strong style={{ color: getHVIColorHex(groundHvi) }}>HVI {Number(groundHvi).toFixed(1)}</strong></>}
+            {urban.uhiDelta != null && (
+              <> · <strong title={`Derived from this zone's heat load${urban.heatStressPct != null ? ` (${urban.heatStressPct.toFixed(0)}% heat-stress hours` : ''}${urban.peakUtci != null ? `, peak UTCI ${urban.peakUtci.toFixed(1)}°C)` : urban.heatStressPct != null ? ')' : ''} — overrides her barri-table default`}>
+                UHI +{urban.uhiDelta.toFixed(1)}°C → building model
+              </strong></>
+            )}
             {groundDrivers.length > 0 && <> · {groundDrivers.slice(0, 3).join(', ')}</>}
           </span>
         </div>
       ) : (
         <div className="ba-grounding ba-grounding--muted">
-          Tip: select a building in <strong>3D Explore</strong> or <strong>HVI Map</strong> first to auto-fill location & era.
+          Tip: analyse a zone, then select a building in <strong>3D Explore</strong> or <strong>HVI Map</strong> to ground this analysis (location, era & measured UHI).
         </div>
       )}
 
@@ -309,7 +315,7 @@ export default function BuildingAnalysisTab({ selectedBuilding }) {
       {state === 'error' && <div className="ba-error">{errorMsg}</div>}
 
       <div className="ba-form-footer">
-        {state === 'submitting' && <span className="ba-progress">Running pipeline — solar geometry + LLM diagnosis, ~2–5 min…</span>}
+        {state === 'submitting' && <span className="ba-progress">Running pipeline — solar geometry + local LLM diagnosis, ~2–5 min…</span>}
         <button type="submit" className="diagram-generate" disabled={state === 'submitting'}>
           {state === 'submitting' ? 'Analyzing…' : 'Run building analysis'}
         </button>

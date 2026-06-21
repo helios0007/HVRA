@@ -7,6 +7,13 @@
 node_modules/
 backend/venv/
 
+# Building-level backend (vendored subtree) — local venv, runtime uploads & logs.
+# Keep these out of git so `git subtree pull` stays clean.
+building-level/**/.venv/
+building-level/**/venv/
+building-level/**/uploads/
+building-level/**/*.log
+
 # Python artifacts
 __pycache__/
 *.pyc

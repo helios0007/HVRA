@@ -4,11 +4,13 @@
 #   3. Frontend (single UI)                 -> http://localhost:5173
 #
 # Run from the repo root:  ./start-all.ps1
-# One-time setup for the building backend (separate venv + deps + key):
+# One-time setup for the building backend (separate venv + deps):
 #   cd building-level/hvra/backend
-#   python -m venv .venv
-#   .\.venv\Scripts\pip install -r requirements.txt
-#   set ANTHROPIC_API_KEY in building-level/hvra/backend/.env
+#   py -3.12 -m venv .venv          # 3.12 — her scientific stack has no 3.14 wheels yet
+#   .\.venv\Scripts\python -m pip install -r requirements.txt
+# LLM: uses LOCAL Ollama (no Anthropic key). building-level/hvra/backend/.env has
+#   LLM_PROVIDER=ollama / OLLAMA_MODEL=llama3.1:latest. Make sure Ollama is running
+#   (the Windows app starts it automatically; otherwise run `ollama serve`).
 
 $root = $PSScriptRoot
 

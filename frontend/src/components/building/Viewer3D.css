@@ -1,0 +1,116 @@
+.viewer-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.viewer-spaces-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(20, 20, 40, 0.8);
+  color: #ddd;
+  font-size: 0.75rem;
+  border-radius: 5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.viewer-spaces-toggle input {
+  accent-color: #c0392b;
+  cursor: pointer;
+}
+
+.viewer-section-cut {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(20, 20, 40, 0.8);
+  color: #ddd;
+  font-size: 0.75rem;
+  border-radius: 5px;
+  user-select: none;
+}
+
+.vsc-label {
+  white-space: nowrap;
+}
+
+.viewer-section-cut select {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ddd;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  font-size: 0.72rem;
+  padding: 2px 4px;
+}
+
+.viewer-section-cut select option {
+  background: #1a1a2e;
+  color: #ddd;
+}
+
+.viewer-section-cut input[type="range"] {
+  width: 110px;
+  accent-color: #c0392b;
+  cursor: pointer;
+}
+
+.viewer-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  background: rgba(20, 20, 40, 0.85);
+  color: #ccc;
+  font-size: 0.875rem;
+  z-index: 10;
+}
+
+.viewer-overlay--error {
+  background: rgba(40, 10, 10, 0.9);
+  color: #f99;
+}
+
+.viewer-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255,255,255,0.15);
+  border-top-color: #c0392b;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.viewer-msg {
+  color: #bbb;
+  font-size: 0.82rem;
+}
+
+.viewer-err-detail {
+  font-size: 0.78rem;
+  color: #f77;
+  max-width: 320px;
+  text-align: center;
+}
+
+.viewer-err-hint {
+  font-size: 0.75rem;
+  color: #999;
+}
+
+.viewer-err-hint code {
+  background: rgba(255,255,255,0.1);
+  padding: 1px 5px;
+  border-radius: 3px;
+}

@@ -1,0 +1,167 @@
+/* Building-level results view — native port of her 3D viewer + room panels,
+   restyled to our dark theme. Her components consume CSS variables (--text,
+   --surface, …); we define them dark on the .ba-viewer wrapper so everything
+   inherits the dark theme, then override the few hardcoded light surfaces. */
+
+.ba-viewer {
+  /* Dark palette her components inherit via var() */
+  --text: #e6e7ea;
+  --text-muted: #9aa0aa;
+  --border: #2e3038;
+  --surface: #1e1f25;
+  --surface-2: #262830;
+  --accent: #c084fc;
+
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 120px);
+  min-height: 600px;
+  color: var(--text);
+}
+
+/* ── Header bar ── */
+.ba-viewer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 4px 12px;
+  flex-shrink: 0;
+}
+.ba-viewer-meta h3 { margin: 0; font-size: 15px; color: var(--text); }
+.ba-viewer-meta .ba-meta { margin: 2px 0 0; font-size: 12px; color: var(--text-muted); }
+.ba-viewer-actions { display: flex; align-items: center; gap: 10px; }
+
+/* Before / After retrofit toggle */
+.ba-ba-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.ba-ba-toggle button {
+  background: var(--surface);
+  color: var(--text-muted);
+  border: none;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.ba-ba-toggle button + button { border-left: 1px solid var(--border); }
+.ba-ba-toggle button.active { background: var(--accent); color: #fff; }
+.ba-ba-toggle button:not(.active):hover { background: var(--surface-2); color: var(--text); }
+
+.ba-viewer .btn-secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ba-viewer .btn-secondary:hover { background: var(--surface-2); }
+
+/* ── Body split ── */
+.ba-viewer-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
+}
+.ba-viewer-sidebar {
+  width: 360px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.ba-viewer-tabs { display: flex; flex-shrink: 0; border-bottom: 1px solid var(--border); }
+.ba-viewer-tabs button {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 10px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.ba-viewer-tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+.ba-viewer-tabs button:disabled { opacity: .4; cursor: default; }
+.ba-viewer-sidecontent { flex: 1; overflow-y: auto; padding: 12px; }
+.ba-viewer-sidecontent .ba-hint { color: var(--text-muted); font-size: 13px; padding: 8px; }
+
+.ba-viewer-main {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #14151a;
+}
+
+/* Risk legend over the canvas */
+.ba-viewer-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  z-index: 5;
+}
+.ba-viewer-legend .leg {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(20,20,40,.7);
+}
+.ba-viewer-legend .leg::before {
+  content: '';
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.ba-viewer-legend .critical::before { background: #e74c3c; }
+.ba-viewer-legend .high::before     { background: #e67e22; }
+.ba-viewer-legend .moderate::before { background: #f1c40f; }
+.ba-viewer-legend .safe::before     { background: #2ecc71; }
+
+/* ── Dark overrides for her components' hardcoded light surfaces ── */
+.ba-viewer .pv-table thead th { background: var(--surface-2); color: var(--text-muted); }
+.ba-viewer .pv-row { border-bottom: 1px solid var(--border); }
+.ba-viewer .pv-row:hover { background: var(--surface-2); }
+.ba-viewer .pv-row--selected { background: #3a2030; }
+.ba-viewer .pv-score-bar-wrap,
+.ba-viewer .score-bar-wrap { background: #34363f; }
+.ba-viewer .factor-chip { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); }
+
+.ba-viewer .retrofit-card { background: var(--surface); }
+.ba-viewer .rc-header { background: var(--surface-2); }
+.ba-viewer .rc-header:hover { background: #30323c; }
+.ba-viewer .rc-feasibility { background: #2a2614; border: 1px solid #5c4f1e; }
+.ba-viewer .rc-feasibility .rc-label { color: #e3c34d; }
+.ba-viewer .rc-feasibility p { color: #d9c48a; }
+.ba-viewer .rc-alternates { background: #1c2330; }
+
+.ba-viewer .wall-section { background: var(--surface-2); }
+.ba-viewer .oh-chip { background: #3a201d; border: 1px solid #6a3a32; color: #f3b4ab; }
+
+/* Risk badges: keep their colour identity but on a darker pill */
+.ba-viewer .badge--critical, .ba-viewer .pb--critical { background: #3a1715; color: #ff9b8e; border-color: #6a2a24; }
+.ba-viewer .badge--high,     .ba-viewer .pb--high     { background: #3a2614; color: #ffbe83; border-color: #6a4a24; }
+.ba-viewer .badge--moderate, .ba-viewer .pb--moderate { background: #38330f; color: #f2dd6b; border-color: #6a5f1e; }
+.ba-viewer .badge--safe,     .ba-viewer .pb--safe     { background: #15301f; color: #86e6ad; border-color: #245c3a; }

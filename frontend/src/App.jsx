@@ -7,6 +7,10 @@ import DiagramSheet from './components/DiagramSheet';
 import LandingPage from './components/LandingPage';
 import BuildingAnalysisTab from './components/BuildingAnalysisTab';
 import {
+  IconOasis, IconPencil, IconCube, IconMap, IconThermometer,
+  IconBulb, IconBuilding, IconFlame, IconCityscape,
+} from './components/Icons';
+import {
   getHVIColorHex,
   riskLabel,
   riskTier,
@@ -431,6 +435,38 @@ function ToggleCard({ icon, title, subtitle, metric, metricLabel, on, onClick, a
   );
 }
 
+// CTA card: when a building is selected on a map, offer to drill into the
+// building-level (IFC) analysis — carrying that building as grounding. Shown in
+// the 3D Explore and Interventions dashboards; clicking opens the Building tab.
+function BuildingDrilldownCard({ building, onOpen, onClear }) {
+  if (!building) return null;
+  const p = building.properties || {};
+  const hvi = p.hvi_score ?? p.vulnerability_score;
+  const label = p.name || p.id || p.building_id || p.osm_id || 'Selected building';
+  return (
+    <div className="bldg-drill-card">
+      <div className="bldg-drill-head">
+        <span className="bldg-drill-icon"><IconBuilding size={18} /></span>
+        <div className="bldg-drill-titles">
+          <span className="bldg-drill-title">Building selected</span>
+          <span className="bldg-drill-sub">
+            {String(label).slice(0, 24)}
+            {hvi != null && <> · <strong style={{ color: getHVIColorHex(hvi) }}>HVI {Number(hvi).toFixed(1)}</strong></>}
+          </span>
+        </div>
+        {onClear && <button className="bldg-drill-clear" onClick={onClear} title="Deselect building">×</button>}
+      </div>
+      <p className="bldg-drill-text">
+        Drill into this building: room-by-room heat diagnosis, retrofit strategies and an
+        interactive 3D model — grounded in its location &amp; measured UHI.
+      </p>
+      <button type="button" className="bldg-drill-btn" onClick={onOpen}>
+        Upload IFC for building-level analysis →
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('analyze');
   const [selectedZone, setSelectedZone] = useState(null);
@@ -683,8 +719,8 @@ export default function App() {
       {/* Header */}
       <header className="app-header">
         <div className="app-brand" onClick={() => setShowLanding(true)} style={{ cursor: 'pointer' }} title="Back to home">
-          <span className="app-logo">🏙️ Urban Heat Triage</span>
-          <span className="app-subtitle">Heat Vulnerability Index (HVI) · demo city: Barcelona</span>
+          <span className="app-logo"><IconOasis size={20} /> OASIS</span>
+          <span className="app-subtitle">Overheating Assessment System for Intervention Strategies · Barcelona</span>
         </div>
         <div className="app-status">
           {stats && !loading && (
@@ -702,22 +738,22 @@ export default function App() {
       {/* Tab Bar */}
       <div className="tab-bar">
         <button className={`tab ${activeTab === 'analyze' ? 'active' : ''}`} onClick={() => setActiveTab('analyze')}>
-          <span className="tab-icon">✏️</span> Draw &amp; Analyze
+          <span className="tab-icon"><IconPencil /></span> Draw &amp; Analyze
         </button>
         <button className={`tab ${activeTab === 'explore3d' ? 'active' : ''}`} onClick={() => setActiveTab('explore3d')} disabled={!selectedZone}>
-          <span className="tab-icon">🧊</span> 3D Explore
+          <span className="tab-icon"><IconCube /></span> 3D Explore
         </button>
         <button className={`tab ${activeTab === 'hvi' ? 'active' : ''}`} onClick={handleHVITabClick} disabled={!selectedZone}>
-          <span className="tab-icon">🗺️</span> HVI Map
+          <span className="tab-icon"><IconMap /></span> HVI Map
         </button>
         <button className={`tab ${activeTab === 'results' ? 'active' : ''}`} onClick={() => setActiveTab('results')} disabled={!selectedZone}>
-          <span className="tab-icon">🌡️</span> Heatmap &amp; Drivers
+          <span className="tab-icon"><IconThermometer /></span> Heatmap &amp; Drivers
         </button>
         <button className={`tab ${activeTab === 'interventions' ? 'active' : ''}`} onClick={() => setActiveTab('interventions')} disabled={!hviData}>
-          <span className="tab-icon">💡</span> Interventions
+          <span className="tab-icon"><IconBulb /></span> Interventions
         </button>
         <button className={`tab ${activeTab === 'building' ? 'active' : ''}`} onClick={() => setActiveTab('building')}>
-          <span className="tab-icon">🏢</span> Building Analysis
+          <span className="tab-icon"><IconBuilding /></span> Building Analysis
         </button>
       </div>
 
@@ -821,12 +857,17 @@ export default function App() {
             </div>
             <div className="panel-side">
               <div className="panel-content">
+                <BuildingDrilldownCard
+                  building={selectedBuilding}
+                  onOpen={() => setActiveTab('building')}
+                  onClear={() => setSelectedBuilding(null)}
+                />
                 {stats ? (
                   <>
                     <ScenarioToggle scenario={scenario} setScenario={setScenario} compare={climateCompare} />
                     <div className="toggle-card-grid">
                       <ToggleCard
-                        icon="🔴"
+                        icon={<IconFlame size={16} />}
                         title="Highest HVI building"
                         subtitle={showOnlyHighestVulnerable ? 'Isolated — others greyed, camera orbited in' : 'Tap to isolate & fly to the most at-risk building'}
                         metric={stats?.max_hvi != null ? stats.max_hvi.toFixed(1) : '—'}
@@ -836,7 +877,7 @@ export default function App() {
                         accent="#ef4444"
                       />
                       <ToggleCard
-                        icon="🏙️"
+                        icon={<IconCityscape size={16} />}
                         title="Context buildings"
                         subtitle={showContextHvi ? 'Colored by HVI' : 'Greyed (outside drawn zone)'}
                         metric={zoneSplit.context}
@@ -1051,10 +1092,16 @@ export default function App() {
                 hviData={whatIfData || scenarioHvi}
                 zoneBounds={selectedZone?.zone_geojson}
                 heatmap={whatIfHeatmap}
+                onBuildingSelect={setSelectedBuilding}
               />
             </div>
             <div className="panel-side">
               <div className="panel-content">
+                <BuildingDrilldownCard
+                  building={selectedBuilding}
+                  onOpen={() => setActiveTab('building')}
+                  onClear={() => setSelectedBuilding(null)}
+                />
                 <h3>Design interventions</h3>
                 <p>Toggle measures to see the zone recolor with the projected HVI. Effects use published cooling coefficients.</p>
 
@@ -1230,7 +1277,10 @@ export default function App() {
         {activeTab === 'building' && (
           <div className="tab-panel">
             <div className="panel-main" style={{ overflowY: 'auto' }}>
-              <BuildingAnalysisTab selectedBuilding={selectedBuilding} />
+              <BuildingAnalysisTab
+                selectedBuilding={selectedBuilding}
+                urbanAnalysis={selectedZone?.vulnerability_analysis}
+              />
             </div>
           </div>
         )}
