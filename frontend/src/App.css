@@ -1072,6 +1072,31 @@ body {
 
 .iv-stat.impact { color: var(--accent-green); border-color: rgba(52, 211, 153, 0.35); font-weight: 800; }
 
+.iv-cost {
+  margin-bottom: 8px;
+  padding: 7px 9px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid #fbbf24;
+  border-radius: 6px;
+}
+.iv-cost-head { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+.iv-cost-total { font-size: 14px; font-weight: 800; color: #fbbf24; }
+.iv-cost-scope { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted); }
+.iv-cost-break { font-size: 10px; color: var(--text-muted); line-height: 1.45; margin-top: 3px; }
+
+.programme-cost {
+  margin: 0 0 14px;
+  padding: 11px 13px;
+  background: linear-gradient(180deg, rgba(251,191,36,0.10), rgba(251,191,36,0.03));
+  border: 1px solid rgba(251,191,36,0.35);
+  border-radius: 10px;
+}
+.programme-cost-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.programme-cost-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #fbbf24; }
+.programme-cost-value { font-size: 18px; font-weight: 800; color: #fbbf24; }
+.programme-cost-note { display: block; font-size: 9.5px; color: var(--text-muted); line-height: 1.4; margin-top: 5px; }
+
 .iv-evidence {
   font-size: 10.5px;
   color: var(--text-muted);

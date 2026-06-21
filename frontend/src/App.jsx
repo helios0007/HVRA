@@ -20,6 +20,7 @@ import {
   computeZoneStats,
 } from './utils/interventionEngine';
 import { computeWhatIfHeatmap } from './utils/heatmapWhatIf';
+import { zoneCostContext, estimateCost, formatEuro } from './utils/costModel';
 import { computeRegenerativeImpact } from './utils/regenerativeImpact';
 import { applyClimateScenario, compareScenarios, CLIMATE_SCENARIOS } from './utils/climateScenario';
 import { REGEN_TAGS, INTERVENTION_CATALOG } from './data/interventionCatalog';
@@ -666,6 +667,12 @@ export default function App() {
     return { inZone, context: feats.length - inZone };
   }, [scenarioHvi, selectedZone]);
 
+  // Zone geometry aggregated once → drives the per-intervention cost estimates.
+  const costCtx = useMemo(
+    () => zoneCostContext(scenarioHvi?.buildings_with_hvi, selectedZone?.zone_geojson),
+    [scenarioHvi, selectedZone]
+  );
+
   if (showLanding) {
     return <LandingPage onLaunch={() => { setShowLanding(false); setActiveTab('analyze'); }} />;
   }
@@ -1095,6 +1102,25 @@ export default function App() {
                   </div>
                 )}
 
+                {/* Programme cost — sum of the selected measures for this zone */}
+                {activeInterventions.length > 0 && (() => {
+                  const ests = activeInterventions
+                    .map((id) => estimateCost(CATALOG_BY_ID[id], costCtx))
+                    .filter(Boolean);
+                  if (!ests.length) return null;
+                  const low = ests.reduce((s, e) => s + e.low, 0);
+                  const high = ests.reduce((s, e) => s + e.high, 0);
+                  return (
+                    <div className="programme-cost">
+                      <div className="programme-cost-row">
+                        <span className="programme-cost-label">Programme cost · {activeInterventions.length} measure{activeInterventions.length > 1 ? 's' : ''}</span>
+                        <span className="programme-cost-value">{formatEuro(low)} – {formatEuro(high)}</span>
+                      </div>
+                      <span className="programme-cost-note">Computed from this zone's roof / façade / floor area, dwellings & street length × evidence-based unit rates.</span>
+                    </div>
+                  );
+                })()}
+
                 {/* Ecological give-back beyond the property line */}
                 {activeInterventions.length > 0 && <GiveBackPanel give={regenImpact?.giveBack} />}
 
@@ -1149,6 +1175,27 @@ export default function App() {
                         <span className="iv-stat">{iv.cost.level}</span>
                         <span className="iv-stat">{iv.timeframe}</span>
                       </div>
+                      {(() => {
+                        const est = estimateCost(iv, costCtx);
+                        if (!est) return null;
+                        return (
+                          <div className="iv-cost">
+                            <div className="iv-cost-head">
+                              <span className="iv-cost-total">
+                                {est.free ? 'Free · €0' : `${formatEuro(est.low)} – ${formatEuro(est.high)}`}
+                              </span>
+                              <span className="iv-cost-scope">estimated for this zone</span>
+                            </div>
+                            {!est.free && est.quantity > 0 && (
+                              <div className="iv-cost-break">
+                                {est.quantity.toLocaleString()} {est.unit} × €{est.perLow.toLocaleString()}
+                                {est.perHigh !== est.perLow ? `–${est.perHigh.toLocaleString()}` : ''}
+                                {iv.cost?.detail ? ` · ${iv.cost.detail}` : ''}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <div className="iv-evidence" title={iv.evidence}>
                         📚 {iv.evidence}
                         {' '}
