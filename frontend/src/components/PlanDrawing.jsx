@@ -48,11 +48,13 @@ const PlanDrawing = forwardRef(function PlanDrawing(
     ring.map(([x, y], i) => `${i ? 'L' : 'M'}${X(x).toFixed(1)},${Y(y).toFixed(1)}`).join('') + 'Z';
   const buildingPath = (b) => b.rings.map(ringPath).join(' ');
 
-  // unbuilt space = zone (or bbox) minus all footprints, via even-odd fill
+  // unbuilt space = zone (or bbox) minus the IN-ZONE footprints, via even-odd
+  // fill. Context buildings sit outside the zone outline, so they are excluded.
   const outerRing = plan.zoneRing
     ? ringPath(plan.zoneRing)
     : `M${X(0)},${Y(0)}L${X(plan.widthM)},${Y(0)}L${X(plan.widthM)},${Y(plan.heightM)}L${X(0)},${Y(plan.heightM)}Z`;
-  const unbuiltPath = outerRing + ' ' + plan.buildings.map(buildingPath).join(' ');
+  const unbuiltPath =
+    outerRing + ' ' + plan.buildings.filter((b) => !b.isContext).map(buildingPath).join(' ');
 
   const surfaceFill =
     plan.surface === 'depave' ? '#16a34a14' : plan.surface === 'cool' ? '#2563eb10' : null;
@@ -93,23 +95,30 @@ const PlanDrawing = forwardRef(function PlanDrawing(
         />
       )}
 
-      {/* buildings */}
-      {plan.buildings.map((b, i) => (
-        <g key={i} opacity={b.isContext ? 0.5 : 1}>
-          <path
-            d={buildingPath(b)}
-            fill={b.isContext ? '#d3d3d3' : (b.roof === 'green' ? '#16a34a22' : b.roof === 'cool' ? '#2563eb14' : '#fff')}
-            fillRule="evenodd"
-            stroke={INK}
-            strokeWidth={b.isContext ? 0.7 : 1.1}
-            opacity={b.isContext ? 0.6 : 1}
-          />
-          {b.retrofit && !b.isContext && (
-            <path d={buildingPath(b)} fill="none" fillRule="evenodd" stroke={BLUE} strokeWidth="2.6" opacity="0.35" />
-          )}
-          <circle cx={X(b.centroid[0])} cy={Y(b.centroid[1])} r="2.6" fill={getHVIColorHex(b.hvi ?? 5)} opacity={b.isContext ? 0.5 : 1} />
-        </g>
-      ))}
+      {/* buildings — context buildings are faint unless the user opted to apply
+          interventions to them too (then they read like zone buildings, with a
+          dashed outline to flag they sit outside the drawn zone). */}
+      {plan.buildings.map((b, i) => {
+        const faint = b.isContext && !plan.contextIntervened;
+        const roofFill = b.roof === 'green' ? '#16a34a22' : b.roof === 'cool' ? '#2563eb14' : '#fff';
+        return (
+          <g key={i} opacity={faint ? 0.5 : 1}>
+            <path
+              d={buildingPath(b)}
+              fill={faint ? '#d3d3d3' : roofFill}
+              fillRule="evenodd"
+              stroke={INK}
+              strokeWidth={faint ? 0.7 : 1.1}
+              strokeDasharray={b.isContext && !faint ? '3 2' : undefined}
+              opacity={faint ? 0.45 : 1}
+            />
+            {b.retrofit && (
+              <path d={buildingPath(b)} fill="none" fillRule="evenodd" stroke={BLUE} strokeWidth="2.6" opacity="0.35" />
+            )}
+            <circle cx={X(b.centroid[0])} cy={Y(b.centroid[1])} r="2.6" fill={getHVIColorHex(b.hvi ?? 5)} opacity={faint ? 0.4 : 1} />
+          </g>
+        );
+      })}
 
       {/* shelter flag on top of its building */}
       {plan.shelter && (

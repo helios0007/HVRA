@@ -15,7 +15,7 @@ function buildingsToGeoJSON(buildingData) {
   return buildingData;
 }
 
-export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, buildingData, hviData, zoneBounds, heatmap, showOnlyHighestVulnerable, onToggleHighestVulnerable }) {
+export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, buildingData, hviData, zoneBounds, heatmap, showOnlyHighestVulnerable, onToggleHighestVulnerable, showContextHvi = false }) {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const overlay = useRef(null);
@@ -117,17 +117,30 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
 
     let maxId = null;
     if (showOnlyHighestVulnerable && buildingsToCheck.features.length > 0) {
-      const maxBuilding = buildingsToCheck.features.reduce((max, f) => {
-        const fHvi = f.properties?.hvi_score ?? 0;
-        const maxHvi = max.properties?.hvi_score ?? 0;
-        return fHvi > maxHvi ? f : max;
-      });
-      // Use a combination of properties as ID to identify the max building
-      maxId = maxBuilding.properties?.id || maxBuilding.properties?.identifier || JSON.stringify(maxBuilding.properties);
+      // The highest-HVI building must be one INSIDE the drawn zone — context
+      // buildings (outside the polygon) are excluded from this pick.
+      const zoneFeature = zoneBounds?.coordinates
+        ? { type: 'Feature', geometry: zoneBounds, properties: {} }
+        : null;
+      const candidates = zoneFeature
+        ? buildingsToCheck.features.filter((f) => {
+            try { return booleanPointInPolygon(turfCentroid(f), zoneFeature); }
+            catch (e) { return true; }
+          })
+        : buildingsToCheck.features;
+      if (candidates.length > 0) {
+        const maxBuilding = candidates.reduce((max, f) => {
+          const fHvi = f.properties?.hvi_score ?? 0;
+          const maxHvi = max.properties?.hvi_score ?? 0;
+          return fHvi > maxHvi ? f : max;
+        });
+        // Use a combination of properties as ID to identify the max building
+        maxId = maxBuilding.properties?.id || maxBuilding.properties?.identifier || JSON.stringify(maxBuilding.properties);
+      }
     }
 
     return { allZoneBuildings: buildingsToCheck, maxHviBuildingId: maxId };
-  }, [hviData, zoneBuildings, buildingData, showOnlyHighestVulnerable]);
+  }, [hviData, zoneBuildings, buildingData, showOnlyHighestVulnerable, zoneBounds]);
 
   // The ONE place that decides a building's display color. Tooltip and
   // inspector use this too, so what you hover always matches what you see.
@@ -169,20 +182,29 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
     if (buildingsToRender) {
       const buildingGeoJSON = buildingsToGeoJSON(buildingsToRender);
 
-      // Keep only buildings inside the drawn zone (if not already filtered by backend)
-      let inZone = buildingGeoJSON.features;
-      if (zoneBounds && !zoneBuildings) {
-        const zoneFeature = { type: 'Feature', geometry: zoneBounds, properties: {} };
-        inZone = inZone.filter((f) => {
+      // Tag each building as inside / outside the drawn zone polygon.
+      // Infrared returns every building in the zone's bounding box, so some
+      // fall outside the actual drawn shape — those render as grey context.
+      const zoneFeature = zoneBounds?.coordinates
+        ? { type: 'Feature', geometry: zoneBounds, properties: {} }
+        : null;
+      const inZoneMap = new WeakMap();
+      for (const f of buildingGeoJSON.features) {
+        let inside = true;
+        if (zoneFeature) {
           try {
-            return booleanPointInPolygon(turfCentroid(f), zoneFeature);
+            inside = booleanPointInPolygon(turfCentroid(f), zoneFeature);
           } catch (e) {
-            return true;
+            inside = true;
           }
-        });
+        }
+        inZoneMap.set(f, inside);
       }
 
-      const filtered = inZone.filter((d) => {
+      // The HVI score filter applies only to in-zone buildings; out-of-zone
+      // context buildings are always shown (greyed, faded).
+      const filtered = buildingGeoJSON.features.filter((d) => {
+        if (!inZoneMap.get(d)) return true;
         const score = d.properties.hvi_score ?? d.properties.vulnerability_score ?? 5.0;
         return score >= hviFilter;
       });
@@ -200,13 +222,24 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
           stroked: false,
           getElevation: (f) => (f.properties.height || 15) * heightScale,
           getFillColor: (f) => {
+            const inZone = inZoneMap.get(f);
             const score = f.properties.hvi_score ?? f.properties.vulnerability_score ?? 5.0;
             const buildingId = f.properties?.id || f.properties?.identifier || JSON.stringify(f.properties);
 
-            // If highest vulnerable filter is on and this is NOT the max building, show in grey
-            if (showOnlyHighestVulnerable && maxHviBuildingId && buildingId !== maxHviBuildingId) {
+            // Highest-HVI isolation: grey EVERYTHING (in-zone + context) except the
+            // single highest-HVI building inside the drawn zone.
+            if (showOnlyHighestVulnerable && maxHviBuildingId) {
+              if (buildingId === maxHviBuildingId) return [...colorFor(score), Math.round(opacity * 2.55)];
               return [128, 128, 128, Math.round((opacity * 0.5) * 2.55)];
             }
+
+            // Context buildings (outside the drawn polygon): grey by default, or
+            // HVI-colored (slightly faded) when the user enables the context toggle.
+            if (!inZone) {
+              if (showContextHvi) return [...colorFor(score), Math.round((opacity * 0.85) * 2.55)];
+              return [110, 114, 122, Math.round((opacity * 0.4) * 2.55)];
+            }
+
             return [...colorFor(score), Math.round(opacity * 2.55)];
           },
           getLineColor: [10, 14, 20, 160],
@@ -229,7 +262,7 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
           },
           updateTriggers: {
             getElevation: [heightScale],
-            getFillColor: [opacity, relativeColors, hviFilter, scoreRange, showOnlyHighestVulnerable, maxHviBuildingId],
+            getFillColor: [opacity, relativeColors, hviFilter, scoreRange, showOnlyHighestVulnerable, maxHviBuildingId, showContextHvi],
           },
         })
       );
@@ -297,7 +330,7 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
     }
 
     overlay.current.setProps({ layers });
-  }, [allZoneBuildings, maxHviBuildingId, bufferZoneBuildings, zoneBounds, styleReady, heightScale, opacity, hviFilter, wireframe, relativeColors, displayScore, heatmap, showHeatmap, heatOpacity, showOnlyHighestVulnerable]);
+  }, [allZoneBuildings, maxHviBuildingId, bufferZoneBuildings, zoneBounds, styleReady, heightScale, opacity, hviFilter, wireframe, relativeColors, displayScore, heatmap, showHeatmap, heatOpacity, showOnlyHighestVulnerable, showContextHvi]);
 
   const hp = hovered?.properties;
   const hScore = hp ? (hp.hvi_score ?? hp.vulnerability_score ?? 5.0) : null;

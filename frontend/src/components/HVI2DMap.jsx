@@ -70,6 +70,24 @@ export default function HVI2DMap({ selectedZone, hviData, onBuildingSelect }) {
       }).addTo(map);
     }
 
+    // Drawn-zone boundary — drawn on top so the user can tell which buildings
+    // fall inside the analysed zone vs. the surrounding context.
+    if (selectedZone.zone_geojson?.coordinates) {
+      L.geoJSON(
+        { type: 'Feature', geometry: selectedZone.zone_geojson, properties: {} },
+        {
+          interactive: false,
+          style: {
+            fill: false,
+            color: '#2563eb',
+            weight: 2.5,
+            opacity: 0.9,
+            dashArray: '8 5',
+          },
+        }
+      ).addTo(map);
+    }
+
     // Fit bounds to zone
     if (selectedZone.zone_geojson?.coordinates) {
       const bounds = L.latLngBounds(

@@ -31,13 +31,16 @@ function pointInRing(px, py, ring) {
   return inside;
 }
 
-export function buildPlan(buildings, contextBuildings, zoneBounds, activeIds = []) {
+export function buildPlan(buildings, contextBuildings, zoneBounds, activeIds = [], options = {}) {
   // Handle both old API (3 args) and new API (4 args)
   if (contextBuildings && typeof contextBuildings === 'object' && !('features' in contextBuildings) && Array.isArray(contextBuildings)) {
     activeIds = zoneBounds;
     zoneBounds = contextBuildings;
     contextBuildings = null;
   }
+
+  // When true, interventions are also applied to context (out-of-zone) buildings.
+  const includeContextInterventions = !!options.includeContextInterventions;
 
   const feats = buildings?.features?.filter((f) => f.geometry) || [];
   const contextFeats = contextBuildings?.features?.filter((f) => f.geometry) || [];
@@ -46,6 +49,7 @@ export function buildPlan(buildings, contextBuildings, zoneBounds, activeIds = [
   if (!allFeats.length) return null;
 
   // ---- bbox & projection (metres from the SW corner) ----
+  // Scan every building so context buildings stay within the drawing frame.
   let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
   const scan = (ring) => {
     for (const [x, y] of ring) {
@@ -55,7 +59,7 @@ export function buildPlan(buildings, contextBuildings, zoneBounds, activeIds = [
       if (y > n) n = y;
     }
   };
-  for (const f of feats) {
+  for (const f of allFeats) {
     const g = f.geometry;
     if (g.type === 'Polygon') g.coordinates.forEach(scan);
     else if (g.type === 'MultiPolygon') g.coordinates.forEach((p) => p.forEach(scan));
@@ -66,6 +70,11 @@ export function buildPlan(buildings, contextBuildings, zoneBounds, activeIds = [
   const widthM = (e - w) * mLon;
   const heightM = (n - s) * M_PER_DEG_LAT;
 
+  // ---- zone boundary (in metres) — also used to classify in-zone vs context ----
+  let zoneRing = null;
+  const zg = zoneBounds?.geometry || zoneBounds;
+  if (zg?.type === 'Polygon' && zg.coordinates?.[0]) zoneRing = zg.coordinates[0].map(toM);
+
   const has = (id) => activeIds.includes(id);
   const catalogById = Object.fromEntries(INTERVENTION_CATALOG.map((iv) => [iv.id, iv]));
   const applies = (id, factors) => {
@@ -74,9 +83,11 @@ export function buildPlan(buildings, contextBuildings, zoneBounds, activeIds = [
   };
 
   // ---- buildings: rings in metres, centroid, HVI, roof treatment ----
+  // A building is "context" when its centroid falls outside the drawn zone
+  // polygon (Infrared returns everything in the zone's bounding box). Context
+  // buildings are drawn faintly and, by default, receive no interventions.
   const items = [];
   for (const f of allFeats) {
-    const isContext = contextFeats.includes(f);
     const g = f.geometry;
     const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
     const rings = [];
@@ -90,24 +101,24 @@ export function buildPlan(buildings, contextBuildings, zoneBounds, activeIds = [
     }
     cx /= outer.length;
     cy /= outer.length;
+
+    const outsideZone = zoneRing ? !pointInRing(cx, cy, zoneRing) : false;
+    const isContext = contextFeats.includes(f) || outsideZone;
+    const intervene = includeContextInterventions || !isContext;
+
     const factors = f.properties?.hvi_factors;
     let roof = null;
-    if (has('green_roof') && applies('green_roof', factors)) roof = 'green';
-    else if (has('cool_roof') && applies('cool_roof', factors)) roof = 'cool';
+    if (intervene && has('green_roof') && applies('green_roof', factors)) roof = 'green';
+    else if (intervene && has('cool_roof') && applies('cool_roof', factors)) roof = 'cool';
     items.push({
       rings,
       centroid: [cx, cy],
       hvi: f.properties?.hvi_score ?? null,
-      retrofit: has('envelope_retrofit') && applies('envelope_retrofit', factors),
+      retrofit: intervene && has('envelope_retrofit') && applies('envelope_retrofit', factors),
       roof,
       isContext,
     });
   }
-
-  // ---- zone boundary ----
-  let zoneRing = null;
-  const zg = zoneBounds?.geometry || zoneBounds;
-  if (zg?.type === 'Polygon' && zg.coordinates?.[0]) zoneRing = zg.coordinates[0].map(toM);
 
   // ---- street trees: geometric placement in the unbuilt space ----
   const trees = [];
@@ -138,10 +149,11 @@ export function buildPlan(buildings, contextBuildings, zoneBounds, activeIds = [
     }
   }
 
-  // ---- climate shelter: most vulnerable building + 300 m service radius ----
+  // ---- climate shelter: most vulnerable IN-ZONE building + 300 m service radius ----
   let shelter = null;
-  if (has('climate_shelter') && items.length) {
-    const target = items.reduce((a, b) => ((b.hvi ?? 0) > (a.hvi ?? 0) ? b : a));
+  const zoneItems = items.filter((b) => !b.isContext);
+  if (has('climate_shelter') && zoneItems.length) {
+    const target = zoneItems.reduce((a, b) => ((b.hvi ?? 0) > (a.hvi ?? 0) ? b : a));
     shelter = { center: target.centroid, radiusM: 300 };
   }
 
@@ -154,5 +166,6 @@ export function buildPlan(buildings, contextBuildings, zoneBounds, activeIds = [
     shelter,
     surface: has('depave_planting') ? 'depave' : has('cool_pavement') ? 'cool' : null,
     shade: has('shade_structures'),
+    contextIntervened: includeContextInterventions,
   };
 }

@@ -54,6 +54,9 @@ export default function DiagramSheet({ buildings, contextBuildings, whatIfBuildi
   const [orientation, setOrientation] = useState('NS');
   const [position, setPosition] = useState(0.5);
   const [solarHour, setSolarHour] = useState(15);
+  // Off: interventions apply only inside the drawn zone (context buildings stay
+  // grey). On: the same interventions are also applied to context buildings.
+  const [applyToContext, setApplyToContext] = useState(false);
 
   const apartmentRef = useRef(null);
   const sectionRef = useRef(null);
@@ -77,8 +80,8 @@ export default function DiagramSheet({ buildings, contextBuildings, whatIfBuildi
   );
 
   const plan = useMemo(
-    () => buildPlan(filteredBuildings, contextBuildings, zoneBounds, activeIds),
-    [filteredBuildings, contextBuildings, zoneBounds, activeIds]
+    () => buildPlan(filteredBuildings, contextBuildings, zoneBounds, activeIds, { includeContextInterventions: applyToContext }),
+    [filteredBuildings, contextBuildings, zoneBounds, activeIds, applyToContext]
   );
 
   const activeNames = useMemo(
@@ -129,6 +132,19 @@ export default function DiagramSheet({ buildings, contextBuildings, whatIfBuildi
                 <button key={h.value} className={solarHour === h.value ? 'on' : ''}
                   onClick={() => setSolarHour(h.value)}>{h.label}</button>
               ))}
+            </div>
+          </div>
+          <div className="diagram-control">
+            <label>Context buildings</label>
+            <div className="diagram-chips">
+              <button className={!applyToContext ? 'on' : ''} onClick={() => setApplyToContext(false)}
+                title="Interventions apply only inside the drawn zone; context buildings stay grey">
+                Zone only
+              </button>
+              <button className={applyToContext ? 'on' : ''} onClick={() => setApplyToContext(true)}
+                title="Apply the same interventions to buildings outside the drawn zone too">
+                + Outside zone
+              </button>
             </div>
           </div>
         </div>

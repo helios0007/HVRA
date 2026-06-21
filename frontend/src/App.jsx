@@ -386,6 +386,7 @@ export default function App() {
   const [scenario, setScenario] = useState('now'); // 'now' | 'mid' (~2050)
   const [showLanding, setShowLanding] = useState(true);
   const [showOnlyHighestVulnerable, setShowOnlyHighestVulnerable] = useState(false);
+  const [showContextHvi, setShowContextHvi] = useState(false); // color out-of-zone buildings by HVI
 
   const toggleIntervention = (id) => {
     setActiveInterventions((prev) =>
@@ -722,6 +723,7 @@ export default function App() {
                 heatmap={baseHeatmap}
                 showOnlyHighestVulnerable={showOnlyHighestVulnerable}
                 onToggleHighestVulnerable={() => setShowOnlyHighestVulnerable(!showOnlyHighestVulnerable)}
+                showContextHvi={showContextHvi}
               />
             </div>
             <div className="panel-side">
@@ -729,14 +731,22 @@ export default function App() {
                 {stats ? (
                   <>
                     <ScenarioToggle scenario={scenario} setScenario={setScenario} compare={climateCompare} />
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
                       <button
                         className={`diagram-toggle ${showOnlyHighestVulnerable ? 'on' : ''}`}
                         onClick={() => setShowOnlyHighestVulnerable(!showOnlyHighestVulnerable)}
-                        title="Show only the highest vulnerable building"
-                        style={{ flex: 1 }}
+                        title="Grey everything except the single highest-HVI building inside the drawn zone"
+                        style={{ flex: '1 1 45%' }}
                       >
                         {showOnlyHighestVulnerable ? '🔴 Highest HVI Only' : '⚪ All Buildings'}
+                      </button>
+                      <button
+                        className={`diagram-toggle ${showContextHvi ? 'on' : ''}`}
+                        onClick={() => setShowContextHvi(!showContextHvi)}
+                        title="Color context buildings (outside the drawn zone) by their HVI instead of grey"
+                        style={{ flex: '1 1 45%' }}
+                      >
+                        {showContextHvi ? '🌡️ Context: HVI' : '◻️ Context: Grey'}
                       </button>
                     </div>
                     <HVIGauge score={stats.mean_hvi} />
