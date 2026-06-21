@@ -5,6 +5,7 @@ import HVI2DMap from './components/HVI2DMap';
 import FactorBreakdown from './components/FactorBreakdown';
 import DiagramSheet from './components/DiagramSheet';
 import LandingPage from './components/LandingPage';
+import BuildingAnalysisTab from './components/BuildingAnalysisTab';
 import {
   getHVIColorHex,
   riskLabel,
@@ -715,6 +716,9 @@ export default function App() {
         <button className={`tab ${activeTab === 'interventions' ? 'active' : ''}`} onClick={() => setActiveTab('interventions')} disabled={!hviData}>
           <span className="tab-icon">💡</span> Interventions
         </button>
+        <button className={`tab ${activeTab === 'building' ? 'active' : ''}`} onClick={() => setActiveTab('building')}>
+          <span className="tab-icon">🏢</span> Building Analysis
+        </button>
       </div>
 
       {/* Loading overlay with pipeline steps */}
@@ -812,6 +816,7 @@ export default function App() {
                 showOnlyHighestVulnerable={showOnlyHighestVulnerable}
                 onToggleHighestVulnerable={() => setShowOnlyHighestVulnerable(!showOnlyHighestVulnerable)}
                 showContextHvi={showContextHvi}
+                onBuildingSelect={setSelectedBuilding}
               />
             </div>
             <div className="panel-side">
@@ -869,7 +874,7 @@ export default function App() {
         {activeTab === 'hvi' && selectedZone && hviData && (
           <div className="tab-panel">
             <div className="panel-main">
-              <HVI2DMap selectedZone={selectedZone} hviData={hviData} />
+              <HVI2DMap selectedZone={selectedZone} hviData={hviData} onBuildingSelect={setSelectedBuilding} />
             </div>
             <div className="panel-side">
               <div className="panel-content">
@@ -1217,6 +1222,15 @@ export default function App() {
                   applies to buildings where it makes sense (e.g. cool roofs only on risky roofs).
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 6: Building-level IFC analysis (teammate's pipeline, our UI) */}
+        {activeTab === 'building' && (
+          <div className="tab-panel">
+            <div className="panel-main" style={{ overflowY: 'auto' }}>
+              <BuildingAnalysisTab selectedBuilding={selectedBuilding} />
             </div>
           </div>
         )}

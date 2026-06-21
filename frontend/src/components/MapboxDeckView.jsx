@@ -15,7 +15,7 @@ function buildingsToGeoJSON(buildingData) {
   return buildingData;
 }
 
-export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, buildingData, hviData, zoneBounds, heatmap, showOnlyHighestVulnerable, onToggleHighestVulnerable, showContextHvi = false }) {
+export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, buildingData, hviData, zoneBounds, heatmap, showOnlyHighestVulnerable, onToggleHighestVulnerable, showContextHvi = false, onBuildingSelect }) {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const overlay = useRef(null);
@@ -294,6 +294,7 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
             if (info.object) {
               setSelected(info.object.properties);
               flyToFeature(info.object);
+              onBuildingSelect?.(info.object);
             }
           },
           updateTriggers: {
@@ -366,7 +367,7 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
     }
 
     overlay.current.setProps({ layers });
-  }, [allZoneBuildings, maxHviBuildingId, bufferZoneBuildings, zoneBounds, styleReady, heightScale, opacity, hviFilter, wireframe, relativeColors, displayScore, heatmap, showHeatmap, heatOpacity, showOnlyHighestVulnerable, showContextHvi]);
+  }, [allZoneBuildings, maxHviBuildingId, bufferZoneBuildings, zoneBounds, styleReady, heightScale, opacity, hviFilter, wireframe, relativeColors, displayScore, heatmap, showHeatmap, heatOpacity, showOnlyHighestVulnerable, showContextHvi, onBuildingSelect]);
 
   const hp = hovered?.properties;
   const hScore = hp ? (hp.hvi_score ?? hp.vulnerability_score ?? 5.0) : null;
