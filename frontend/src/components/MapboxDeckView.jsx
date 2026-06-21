@@ -102,6 +102,24 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
     );
   }, [zoneBounds]);
 
+  // Orbit the camera onto a clicked/selected building for a close 3D read.
+  const flyToFeature = useCallback((feature) => {
+    if (!map.current || !feature) return;
+    let center = feature.properties?.center;
+    if (!center || center.length !== 2) {
+      try { center = turfCentroid(feature).geometry.coordinates; } catch (e) { return; }
+    }
+    if (!center) return;
+    map.current.flyTo({
+      center,
+      zoom: Math.max(map.current.getZoom(), 17.5),
+      pitch: 58,
+      bearing: (map.current.getBearing() + 35) % 360,
+      duration: 1300,
+      essential: true,
+    });
+  }, []);
+
   // Zone score range — shared by the color stretch, tooltip, and legend
   const scoreRange = useMemo(() => {
     const feats = (hviData?.buildings_with_hvi || buildingData)?.features || [];
@@ -150,6 +168,20 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
     }
     return score;
   }, [relativeColors, scoreRange]);
+
+  // When "Highest HVI only" is enabled, select + orbit onto that building.
+  useEffect(() => {
+    if (!showOnlyHighestVulnerable || !maxHviBuildingId || !styleReady) return;
+    const feats = allZoneBuildings?.features || [];
+    const target = feats.find((f) => {
+      const id = f.properties?.id || f.properties?.identifier || JSON.stringify(f.properties);
+      return id === maxHviBuildingId;
+    });
+    if (target) {
+      setSelected(target.properties);
+      flyToFeature(target);
+    }
+  }, [showOnlyHighestVulnerable, maxHviBuildingId, allZoneBuildings, styleReady, flyToFeature]);
 
   // Update deck.gl layers when data or controls change
   useEffect(() => {
@@ -236,8 +268,8 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
             // Context buildings (outside the drawn polygon): grey by default, or
             // HVI-colored (slightly faded) when the user enables the context toggle.
             if (!inZone) {
-              if (showContextHvi) return [...colorFor(score), Math.round((opacity * 0.85) * 2.55)];
-              return [110, 114, 122, Math.round((opacity * 0.4) * 2.55)];
+              if (showContextHvi) return [...colorFor(score), Math.round((opacity * 0.8) * 2.55)];
+              return [120, 124, 132, Math.round((opacity * 0.25) * 2.55)];
             }
 
             return [...colorFor(score), Math.round(opacity * 2.55)];
@@ -258,7 +290,10 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
             }
           },
           onClick: (info) => {
-            if (info.object) setSelected(info.object.properties);
+            if (info.object) {
+              setSelected(info.object.properties);
+              flyToFeature(info.object);
+            }
           },
           updateTriggers: {
             getElevation: [heightScale],

@@ -1245,6 +1245,59 @@ body {
   color: #fff;
 }
 
+/* ---------- 3D Explore dashboard toggle cards ---------- */
+.toggle-card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.toggle-card {
+  --card-accent: #fb923c;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+  padding: 12px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid var(--border-subtle, #2a2f3a);
+  background: var(--bg-tertiary, #1a1e27);
+  color: var(--text-secondary, #cbd5e1);
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.1s ease;
+}
+.toggle-card:hover { border-color: var(--card-accent); }
+.toggle-card:active { transform: translateY(1px); }
+.toggle-card.on {
+  border-color: var(--card-accent);
+  background: color-mix(in srgb, var(--card-accent) 12%, var(--bg-tertiary, #1a1e27));
+}
+.toggle-card-top { display: flex; align-items: flex-start; gap: 8px; }
+.toggle-card-icon { font-size: 16px; line-height: 1; }
+.toggle-card-titles { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.toggle-card-title { font-size: 12.5px; font-weight: 700; color: var(--text-primary, #f1f5f9); }
+.toggle-card-sub { font-size: 10.5px; line-height: 1.35; color: var(--text-muted, #8a94a6); }
+.toggle-card-switch {
+  flex: none;
+  width: 30px; height: 17px;
+  border-radius: 99px;
+  background: #3a3f4d;
+  position: relative;
+  transition: background 0.18s ease;
+}
+.toggle-card-switch.on { background: var(--card-accent); }
+.toggle-card-knob {
+  position: absolute; top: 2px; left: 2px;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.18s ease;
+}
+.toggle-card-switch.on .toggle-card-knob { transform: translateX(13px); }
+.toggle-card-metric { display: flex; align-items: baseline; gap: 6px; }
+.toggle-card-metric-value { font-size: 20px; font-weight: 800; color: var(--card-accent); }
+.toggle-card-metric-label { font-size: 10px; color: var(--text-muted, #8a94a6); text-transform: uppercase; letter-spacing: 0.4px; }
+
 .diagram-chips { display: flex; gap: 6px; }
 .diagram-chips button {
   padding: 5px 12px;

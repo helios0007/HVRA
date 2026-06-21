@@ -372,6 +372,55 @@ function DataSources() {
   );
 }
 
+// Ray-casting point-in-ring on [lon,lat] coordinates (no turf dependency).
+function pointInRingLL(px, py, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1];
+    const xj = ring[j][0], yj = ring[j][1];
+    if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function featureCentroid(feature) {
+  const g = feature.geometry;
+  if (!g) return null;
+  const ring = g.type === 'Polygon' ? g.coordinates?.[0]
+    : g.type === 'MultiPolygon' ? g.coordinates?.[0]?.[0] : null;
+  if (!ring || !ring.length) return null;
+  let x = 0, y = 0;
+  for (const [lx, ly] of ring) { x += lx; y += ly; }
+  return [x / ring.length, y / ring.length];
+}
+
+// Informative dashboard card that doubles as an on/off control.
+function ToggleCard({ icon, title, subtitle, metric, metricLabel, on, onClick, accent = '#fb923c' }) {
+  return (
+    <button
+      type="button"
+      className={`toggle-card ${on ? 'on' : ''}`}
+      onClick={onClick}
+      style={{ '--card-accent': accent }}
+    >
+      <div className="toggle-card-top">
+        <span className="toggle-card-icon">{icon}</span>
+        <div className="toggle-card-titles">
+          <span className="toggle-card-title">{title}</span>
+          <span className="toggle-card-sub">{subtitle}</span>
+        </div>
+        <span className={`toggle-card-switch ${on ? 'on' : ''}`}><span className="toggle-card-knob" /></span>
+      </div>
+      {metric != null && (
+        <div className="toggle-card-metric">
+          <span className="toggle-card-metric-value">{metric}</span>
+          {metricLabel && <span className="toggle-card-metric-label">{metricLabel}</span>}
+        </div>
+      )}
+    </button>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('analyze');
   const [selectedZone, setSelectedZone] = useState(null);
@@ -585,6 +634,20 @@ export default function App() {
 
   const stats = scenarioHvi?.hvi_statistics;
 
+  // In-zone vs context building split (context = inside Infrared's bbox fetch
+  // but outside the drawn polygon) — feeds the 3D Explore dashboard cards.
+  const zoneSplit = useMemo(() => {
+    const feats = scenarioHvi?.buildings_with_hvi?.features || [];
+    const ring = selectedZone?.zone_geojson?.coordinates?.[0];
+    if (!feats.length || !ring) return { inZone: feats.length, context: 0 };
+    let inZone = 0;
+    for (const f of feats) {
+      const c = featureCentroid(f);
+      if (c && pointInRingLL(c[0], c[1], ring)) inZone++;
+    }
+    return { inZone, context: feats.length - inZone };
+  }, [scenarioHvi, selectedZone]);
+
   if (showLanding) {
     return <LandingPage onLaunch={() => { setShowLanding(false); setActiveTab('analyze'); }} />;
   }
@@ -731,23 +794,27 @@ export default function App() {
                 {stats ? (
                   <>
                     <ScenarioToggle scenario={scenario} setScenario={setScenario} compare={climateCompare} />
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <button
-                        className={`diagram-toggle ${showOnlyHighestVulnerable ? 'on' : ''}`}
+                    <div className="toggle-card-grid">
+                      <ToggleCard
+                        icon="🔴"
+                        title="Highest HVI building"
+                        subtitle={showOnlyHighestVulnerable ? 'Isolated — others greyed, camera orbited in' : 'Tap to isolate & fly to the most at-risk building'}
+                        metric={stats?.max_hvi != null ? stats.max_hvi.toFixed(1) : '—'}
+                        metricLabel="peak HVI / 10"
+                        on={showOnlyHighestVulnerable}
                         onClick={() => setShowOnlyHighestVulnerable(!showOnlyHighestVulnerable)}
-                        title="Grey everything except the single highest-HVI building inside the drawn zone"
-                        style={{ flex: '1 1 45%' }}
-                      >
-                        {showOnlyHighestVulnerable ? '🔴 Highest HVI Only' : '⚪ All Buildings'}
-                      </button>
-                      <button
-                        className={`diagram-toggle ${showContextHvi ? 'on' : ''}`}
+                        accent="#ef4444"
+                      />
+                      <ToggleCard
+                        icon="🏙️"
+                        title="Context buildings"
+                        subtitle={showContextHvi ? 'Colored by HVI' : 'Greyed (outside drawn zone)'}
+                        metric={zoneSplit.context}
+                        metricLabel={`context · ${zoneSplit.inZone} in zone`}
+                        on={showContextHvi}
                         onClick={() => setShowContextHvi(!showContextHvi)}
-                        title="Color context buildings (outside the drawn zone) by their HVI instead of grey"
-                        style={{ flex: '1 1 45%' }}
-                      >
-                        {showContextHvi ? '🌡️ Context: HVI' : '◻️ Context: Grey'}
-                      </button>
+                        accent="#fb923c"
+                      />
                     </div>
                     <HVIGauge score={stats.mean_hvi} />
                     <StatGrid stats={stats} />

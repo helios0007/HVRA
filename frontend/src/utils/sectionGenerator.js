@@ -15,6 +15,17 @@ const M_PER_DEG_LAT = 111320;
 
 // ---------------------------------------------------------------- geometry
 
+// Ray-casting point-in-ring on lon/lat coordinates.
+function pointInRingLL(px, py, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1];
+    const xj = ring[j][0], yj = ring[j][1];
+    if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
 function bboxOfBuildings(features) {
   let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
   const eachPt = (ring) => {
@@ -71,7 +82,15 @@ export function buildSection(buildings, contextBuildings, opts) {
   const feats = buildings?.features?.filter((f) => f.geometry) || [];
   if (!feats.length) return null;
 
-  const { orientation = 'NS', position = 0.5, solarHour = 12, activeIds = [], zoneLstC = 42 } = opts;
+  const {
+    orientation = 'NS',
+    position = 0.5,
+    solarHour = 12,
+    activeIds = [],
+    zoneLstC = 42,
+    zoneBounds = null,
+    includeContextInterventions = false,
+  } = opts;
 
   // Add context buildings to the section if available
   const contextFeats = contextBuildings?.features?.filter((f) => f.geometry) || [];
@@ -107,11 +126,26 @@ export function buildSection(buildings, contextBuildings, opts) {
   const ux = Bm[0] / length;
   const uy = Bm[1] / length;
 
+  // Classify any point along the cut (distance x in metres) as inside the drawn
+  // zone polygon or in the surrounding context. With no polygon, treat all as
+  // in-zone (back-compat).
+  let zoneRingLL = null;
+  const zg = zoneBounds?.geometry || zoneBounds;
+  if (zg?.type === 'Polygon' && zg.coordinates?.[0]) zoneRingLL = zg.coordinates[0];
+  const inZoneAtX = (x) => {
+    if (!zoneRingLL) return true;
+    const lon = A[0] + (x * ux) / mPerDegLon;
+    const lat = A[1] + (x * uy) / M_PER_DEG_LAT;
+    return pointInRingLL(lon, lat, zoneRingLL);
+  };
+  // An intervention is allowed at x when it's inside the zone, or when the user
+  // has opted to extend interventions to context buildings too.
+  const interveneAtX = (x) => includeContextInterventions || inZoneAtX(x);
+
   // --- intersect every building footprint with the cut line (even-odd) ---
   const intervals = [];
   for (const f of allFeats) {
-    // Mark context buildings as such for styling
-    const isContextBuilding = contextFeats.includes(f);
+    const explicitContext = contextFeats.includes(f);
     const g = f.geometry;
     const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
     const ts = [];
@@ -128,6 +162,7 @@ export function buildSection(buildings, contextBuildings, opts) {
     ts.sort((a, b) => a - b);
     for (let i = 0; i + 1 < ts.length; i += 2) {
       if (ts[i + 1] - ts[i] >= 1.5) {
+        const mid = (ts[i] + ts[i + 1]) / 2;
         intervals.push({
           x0: ts[i],
           x1: ts[i + 1],
@@ -136,7 +171,7 @@ export function buildSection(buildings, contextBuildings, opts) {
           hviBefore: f.properties?.hvi_score_before ?? f.properties?.hvi_score ?? null,
           factors: f.properties?.hvi_factors || null,
           year: f.properties?.construction_year ?? null,
-          isContext: isContextBuilding,
+          isContext: explicitContext || !inZoneAtX(mid),
         });
       }
     }
@@ -162,7 +197,8 @@ export function buildSection(buildings, contextBuildings, opts) {
     const w = profiles[i + 1].x0 - profiles[i].x1;
     if (w >= 3) {
       const h = (profiles[i].height + profiles[i + 1].height) / 2;
-      gaps.push({ x0: profiles[i].x1, x1: profiles[i + 1].x0, width: w, hw: h / w });
+      const mid = (profiles[i].x1 + profiles[i + 1].x0) / 2;
+      gaps.push({ x0: profiles[i].x1, x1: profiles[i + 1].x0, width: w, hw: h / w, isContext: !inZoneAtX(mid) });
     }
   }
 
@@ -192,7 +228,8 @@ export function buildSection(buildings, contextBuildings, opts) {
   const has = (id) => activeIds.includes(id);
   const trees = [];
   if (has('street_trees')) {
-    for (const gap of gaps.filter((g) => g.width >= 7)) {
+    // Only plant in gaps inside the zone, unless the user extends to context.
+    for (const gap of gaps.filter((g) => g.width >= 7 && (includeContextInterventions || !g.isContext))) {
       for (let x = gap.x0 + 4; x <= gap.x1 - 4; x += 9) {
         trees.push({ x, crownR: 2.5, crownH: 5.5 });
       }
@@ -200,7 +237,7 @@ export function buildSection(buildings, contextBuildings, opts) {
   }
   const shadePatches = [];
   if (has('shade_structures')) {
-    for (const gap of gaps.filter((g) => g.hw >= 0.8 || g.width <= 14)) {
+    for (const gap of gaps.filter((g) => (g.hw >= 0.8 || g.width <= 14) && (includeContextInterventions || !g.isContext))) {
       const w = Math.min(4, gap.width * 0.4);
       // patch on the sunny side of the canyon (where the shadow does NOT fall)
       const x0 = proj.shadowDir > 0 ? gap.x1 - w : gap.x0;
@@ -239,18 +276,22 @@ export function buildSection(buildings, contextBuildings, opts) {
       continue;
     }
 
+    // Interventions only cool the street where they are allowed (in-zone, or
+    // everywhere when the user extends them to context).
+    const localMatDelta = interveneAtX(x) ? materialDelta : 0;
+
     if (isNight) {
       const baseT = zoneLstC - 14 + nightRetention(x);
       before.push({ x, t: baseT });
       // stored-heat reduction: half the daytime material delta; shading is moot
-      after.push({ x, t: baseT + materialDelta / 2 });
+      after.push({ x, t: baseT + localMatDelta / 2 });
       continue;
     }
 
     const baseT = zoneLstC + 4 - (inShadow(x) ? 6 : 0);
     before.push({ x, t: baseT });
 
-    let tAfter = zoneLstC + 4 + materialDelta;
+    let tAfter = zoneLstC + 4 + localMatDelta;
     const shaded = inShadow(x) || underTree(x) || underShade(x);
     if (shaded) tAfter -= 6;
     after.push({ x, t: tAfter });
@@ -287,6 +328,7 @@ export function buildSection(buildings, contextBuildings, opts) {
   if (has('climate_shelter') && profiles.length) {
     let best = -1;
     profiles.forEach((p, i) => {
+      if (p.isContext) return; // shelter is designated within the drawn zone
       if ((p.hvi ?? 0) > best) {
         best = p.hvi ?? 0;
         shelterIdx = i;
@@ -301,6 +343,7 @@ export function buildSection(buildings, contextBuildings, opts) {
     },
     people,
     shelterIdx,
+    contextIntervened: includeContextInterventions,
     envelopeRetrofit: has('envelope_retrofit'),
     facadeGreening: has('facade_greening'),
     length,

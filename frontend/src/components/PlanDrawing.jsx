@@ -102,20 +102,20 @@ const PlanDrawing = forwardRef(function PlanDrawing(
         const faint = b.isContext && !plan.contextIntervened;
         const roofFill = b.roof === 'green' ? '#16a34a22' : b.roof === 'cool' ? '#2563eb14' : '#fff';
         return (
-          <g key={i} opacity={faint ? 0.5 : 1}>
+          <g key={i} opacity={faint ? 0.32 : 1}>
             <path
               d={buildingPath(b)}
-              fill={faint ? '#d3d3d3' : roofFill}
+              fill={faint ? '#dcdcdc' : roofFill}
               fillRule="evenodd"
               stroke={INK}
-              strokeWidth={faint ? 0.7 : 1.1}
+              strokeWidth={faint ? 0.6 : 1.1}
               strokeDasharray={b.isContext && !faint ? '3 2' : undefined}
-              opacity={faint ? 0.45 : 1}
+              opacity={faint ? 0.5 : 1}
             />
             {b.retrofit && (
               <path d={buildingPath(b)} fill="none" fillRule="evenodd" stroke={BLUE} strokeWidth="2.6" opacity="0.35" />
             )}
-            <circle cx={X(b.centroid[0])} cy={Y(b.centroid[1])} r="2.6" fill={getHVIColorHex(b.hvi ?? 5)} opacity={faint ? 0.4 : 1} />
+            <circle cx={X(b.centroid[0])} cy={Y(b.centroid[1])} r="2.6" fill={getHVIColorHex(b.hvi ?? 5)} opacity={faint ? 0.3 : 1} />
           </g>
         );
       })}

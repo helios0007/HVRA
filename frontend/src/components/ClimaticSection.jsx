@@ -192,7 +192,7 @@ function Building({ p, x, w, h, groundY, mY, xScale, sunnyRight, night, isContex
   const wallPx = Math.max(WALL_M * xScale, 1.4);
   const slabPx = Math.max(SLAB_M * mY, 1.1);
   const detailed = mY >= 1.0 && w > 26;
-  const contextOpacity = isContext ? 0.4 : 1;
+  const contextOpacity = isContext ? 0.25 : 1;
 
   const eraScore = p.factors?.construction_era?.score ?? 0.5;
   const old = p.year ? p.year < 1980 : eraScore >= 0.55;
@@ -434,7 +434,9 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
       {section.gaps.map((g, i) => {
         const x0 = X(g.x0);
         const x1 = X(g.x1);
-        if (surface.depave) {
+        // Surface interventions only apply to in-zone streets (unless extended).
+        const treatHere = !g.isContext || section.contextIntervened;
+        if (surface.depave && treatHere) {
           return (
             <g key={i}>
               <rect x={x0} y={groundY} width={x1 - x0} height={5} fill="#16a34a18" />
@@ -442,7 +444,7 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
             </g>
           );
         }
-        if (surface.coolPavement) {
+        if (surface.coolPavement && treatHere) {
           return (
             <g key={i}>
               <rect x={x0} y={groundY} width={x1 - x0} height={4} fill="#2563eb1c" />
@@ -480,6 +482,9 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
         const h = p.height * mY;
         const roofY = groundY - h;
         const sunnyX = sun.shadowDir > 0 ? x + w : x;
+        // Interventions are drawn on a building only if it's inside the zone, or
+        // the user extended interventions to context buildings.
+        const interveneHere = !p.isContext || section.contextIntervened;
         return (
           <g key={i}>
             <Building
@@ -496,13 +501,13 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
             />
 
             {/* envelope retrofit: insulation as inner dashed offset */}
-            {section.envelopeRetrofit && (
+            {section.envelopeRetrofit && interveneHere && (
               <rect x={x + 3} y={roofY + 3} width={Math.max(w - 6, 2)} height={h - 3}
                 fill="none" stroke={BLUE} strokeWidth="1" strokeDasharray="3 3" />
             )}
 
             {/* green roof: substrate band + planting tufts */}
-            {hasGreenRoof && (
+            {hasGreenRoof && interveneHere && (
               <g>
                 <rect x={x} y={roofY - 3} width={w} height={3} fill="#16a34a30" stroke={GREEN} strokeWidth="0.8" />
                 <Tufts x0={x} x1={x + w} y={roofY - 3} color={GREEN} step={9} size={4} />
@@ -510,7 +515,7 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
             )}
 
             {/* cool roof: white coating + reflection arrows */}
-            {hasCoolRoof && !hasGreenRoof && (
+            {hasCoolRoof && !hasGreenRoof && interveneHere && (
               <g>
                 <line x1={x} y1={roofY - 1.5} x2={x + w} y2={roofY - 1.5} stroke={BLUE} strokeWidth="3" opacity="0.85" />
                 {!isNight && <ReflectArrows x0={x} x1={x + w} y={roofY - 4} />}
@@ -518,7 +523,7 @@ const ClimaticSection = forwardRef(function ClimaticSection({ section, activeNam
             )}
 
             {/* facade greening on the sun-facing facade */}
-            {section.facadeGreening && <FacadeVine x={sunnyX} y0={roofY} y1={groundY} />}
+            {section.facadeGreening && interveneHere && <FacadeVine x={sunnyX} y0={roofY} y1={groundY} />}
 
             {/* climate shelter tag on the most vulnerable building */}
             {section.shelterIdx === i && (

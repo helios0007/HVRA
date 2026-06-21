@@ -75,8 +75,11 @@ export default function DiagramSheet({ buildings, contextBuildings, whatIfBuildi
   );
 
   const section = useMemo(
-    () => buildSection(filteredBuildings, contextBuildings, { orientation, position, solarHour, activeIds, zoneLstC }),
-    [filteredBuildings, contextBuildings, orientation, position, solarHour, activeIds, zoneLstC]
+    () => buildSection(filteredBuildings, contextBuildings, {
+      orientation, position, solarHour, activeIds, zoneLstC,
+      zoneBounds, includeContextInterventions: applyToContext,
+    }),
+    [filteredBuildings, contextBuildings, orientation, position, solarHour, activeIds, zoneLstC, zoneBounds, applyToContext]
   );
 
   const plan = useMemo(
