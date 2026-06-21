@@ -720,6 +720,8 @@ export default function App() {
                 hviData={scenarioHvi}
                 zoneBounds={selectedZone.zone_geojson}
                 heatmap={baseHeatmap}
+                showOnlyHighestVulnerable={showOnlyHighestVulnerable}
+                onToggleHighestVulnerable={() => setShowOnlyHighestVulnerable(!showOnlyHighestVulnerable)}
               />
             </div>
             <div className="panel-side">
@@ -727,6 +729,16 @@ export default function App() {
                 {stats ? (
                   <>
                     <ScenarioToggle scenario={scenario} setScenario={setScenario} compare={climateCompare} />
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
+                      <button
+                        className={`diagram-toggle ${showOnlyHighestVulnerable ? 'on' : ''}`}
+                        onClick={() => setShowOnlyHighestVulnerable(!showOnlyHighestVulnerable)}
+                        title="Show only the highest vulnerable building"
+                        style={{ flex: 1 }}
+                      >
+                        {showOnlyHighestVulnerable ? '🔴 Highest HVI Only' : '⚪ All Buildings'}
+                      </button>
+                    </div>
                     <HVIGauge score={stats.mean_hvi} />
                     <StatGrid stats={stats} />
                     <HVIScaleLegend score={stats.mean_hvi} />
@@ -1061,8 +1073,6 @@ export default function App() {
           zoneFactors={zoneFactors}
           zoneBounds={selectedZone?.zone_geojson}
           peakUtci={peakUtci}
-          showOnlyHighestVulnerable={showOnlyHighestVulnerable}
-          onToggleHighestVulnerable={() => setShowOnlyHighestVulnerable(!showOnlyHighestVulnerable)}
           onClose={() => setShowDiagrams(false)}
         />
       )}

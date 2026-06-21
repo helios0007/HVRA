@@ -7,6 +7,7 @@ import uuid
 from config import Config
 from services.urban_analysis import analyze_zone_vulnerability
 from services.intervention_engine import match_and_rank_strategies
+from services.cache_service import get_cache
 
 router = APIRouter()
 
@@ -25,6 +26,7 @@ class AnalyzeResponse(BaseModel):
 async def analyze_zone(request: AnalyzeRequest):
     """
     Analyze urban zone vulnerability using Infrared SDK and return design suggestions.
+    Caches results to avoid re-analyzing identical zones.
     Requires valid Infrared API key in INFRARED_API_KEY environment variable.
     """
     try:
@@ -35,8 +37,27 @@ async def analyze_zone(request: AnalyzeRequest):
         with open(zone_path, 'w') as f:
             json.dump(request.zone_geojson, f)
 
+        # Check cache first — if same zone geometry was analyzed, return cached result
+        cache = get_cache()
+        cached_result = cache.get(request.zone_geojson)
+        if cached_result:
+            return AnalyzeResponse(
+                zone_id=zone_id,
+                zone_geojson=request.zone_geojson,
+                vulnerability_analysis=cached_result['vulnerability_analysis'],
+                suggested_interventions=cached_result['suggested_interventions']
+            )
+
+        # Not in cache — run the expensive analysis
         vulnerability = await analyze_zone_vulnerability(request.zone_geojson, request.center)
         suggestions = match_and_rank_strategies(vulnerability)
+
+        # Store in cache for future requests
+        cache_data = {
+            'vulnerability_analysis': vulnerability,
+            'suggested_interventions': suggestions
+        }
+        cache.set(request.zone_geojson, cache_data)
 
         return AnalyzeResponse(
             zone_id=zone_id,
@@ -80,3 +101,26 @@ async def get_strategy_details(strategy_id: str):
         if strategy:
             return strategy
     return {"error": f"Strategy {strategy_id} not found"}
+
+@router.get("/cache/stats")
+async def cache_stats():
+    """Get cache statistics."""
+    cache = get_cache()
+    cache_dir = cache.cache_dir
+    if os.path.exists(cache_dir):
+        files = [f for f in os.listdir(cache_dir) if f.endswith('.json')]
+        size_mb = sum(os.path.getsize(os.path.join(cache_dir, f)) for f in files) / (1024 * 1024)
+        return {
+            "cached_analyses": len(files),
+            "cache_size_mb": round(size_mb, 2),
+            "cache_dir": cache_dir
+        }
+    return {"cached_analyses": 0, "cache_size_mb": 0, "cache_dir": cache_dir}
+
+@router.post("/cache/clear")
+async def clear_cache():
+    """Clear analysis cache (use after code changes affecting analysis logic)."""
+    cache = get_cache()
+    if cache.clear():
+        return {"status": "cache cleared"}
+    return {"error": "failed to clear cache"}

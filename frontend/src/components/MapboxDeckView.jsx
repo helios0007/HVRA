@@ -15,11 +15,20 @@ function buildingsToGeoJSON(buildingData) {
   return buildingData;
 }
 
-export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, buildingData, hviData, zoneBounds, heatmap }) {
+export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, buildingData, hviData, zoneBounds, heatmap, showOnlyHighestVulnerable, onToggleHighestVulnerable }) {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const overlay = useRef(null);
   const [styleReady, setStyleReady] = useState(false);
+
+  // DEBUG: Log incoming data
+  useEffect(() => {
+    console.log('[MapboxDeckView] Props received:');
+    console.log('  zoneBuildings:', zoneBuildings);
+    console.log('  bufferZoneBuildings:', bufferZoneBuildings);
+    console.log('  buildingData:', buildingData);
+    console.log('  zoneBounds:', zoneBounds);
+  }, [zoneBuildings, bufferZoneBuildings, buildingData, zoneBounds]);
 
   // View controls
   const [heightScale, setHeightScale] = useState(1);   // 1x = true building heights
@@ -101,6 +110,25 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
     return [Math.min(...scores), Math.max(...scores)];
   }, [hviData, buildingData]);
 
+  // Get all zone buildings and identify the highest HVI one
+  const { allZoneBuildings, maxHviBuildingId } = useMemo(() => {
+    const buildingsToCheck = hviData?.buildings_with_hvi || zoneBuildings || buildingData;
+    if (!buildingsToCheck?.features) return { allZoneBuildings: buildingsToCheck, maxHviBuildingId: null };
+
+    let maxId = null;
+    if (showOnlyHighestVulnerable && buildingsToCheck.features.length > 0) {
+      const maxBuilding = buildingsToCheck.features.reduce((max, f) => {
+        const fHvi = f.properties?.hvi_score ?? 0;
+        const maxHvi = max.properties?.hvi_score ?? 0;
+        return fHvi > maxHvi ? f : max;
+      });
+      // Use a combination of properties as ID to identify the max building
+      maxId = maxBuilding.properties?.id || maxBuilding.properties?.identifier || JSON.stringify(maxBuilding.properties);
+    }
+
+    return { allZoneBuildings: buildingsToCheck, maxHviBuildingId: maxId };
+  }, [hviData, zoneBuildings, buildingData, showOnlyHighestVulnerable]);
+
   // The ONE place that decides a building's display color. Tooltip and
   // inspector use this too, so what you hover always matches what you see.
   const displayScore = useCallback((score) => {
@@ -113,6 +141,10 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
   // Update deck.gl layers when data or controls change
   useEffect(() => {
     if (!overlay.current || !map.current || !styleReady) return;
+
+    console.log('[MapboxDeckView] Updating layers...');
+    console.log('  allZoneBuildings:', allZoneBuildings?.features?.length || 0, 'buildings');
+    console.log('  bufferZoneBuildings:', bufferZoneBuildings?.features?.length || 0, 'buildings');
 
     const layers = [];
 
@@ -130,7 +162,7 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
       );
     }
 
-    const buildingsToRender = hviData?.buildings_with_hvi || zoneBuildings || buildingData;
+    const buildingsToRender = allZoneBuildings;
     const bufferBuildingsToRender = bufferZoneBuildings?.features?.length > 0 ? bufferZoneBuildings : null;
 
     // Render zone buildings (colored by vulnerability)
@@ -169,6 +201,12 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
           getElevation: (f) => (f.properties.height || 15) * heightScale,
           getFillColor: (f) => {
             const score = f.properties.hvi_score ?? f.properties.vulnerability_score ?? 5.0;
+            const buildingId = f.properties?.id || f.properties?.identifier || JSON.stringify(f.properties);
+
+            // If highest vulnerable filter is on and this is NOT the max building, show in grey
+            if (showOnlyHighestVulnerable && maxHviBuildingId && buildingId !== maxHviBuildingId) {
+              return [128, 128, 128, Math.round((opacity * 0.5) * 2.55)];
+            }
             return [...colorFor(score), Math.round(opacity * 2.55)];
           },
           getLineColor: [10, 14, 20, 160],
@@ -191,7 +229,7 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
           },
           updateTriggers: {
             getElevation: [heightScale],
-            getFillColor: [opacity, relativeColors, hviFilter, scoreRange],
+            getFillColor: [opacity, relativeColors, hviFilter, scoreRange, showOnlyHighestVulnerable, maxHviBuildingId],
           },
         })
       );
@@ -259,7 +297,7 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
     }
 
     overlay.current.setProps({ layers });
-  }, [zoneBuildings, bufferZoneBuildings, buildingData, hviData, zoneBounds, styleReady, heightScale, opacity, hviFilter, wireframe, relativeColors, displayScore, heatmap, showHeatmap, heatOpacity]);
+  }, [allZoneBuildings, maxHviBuildingId, bufferZoneBuildings, zoneBounds, styleReady, heightScale, opacity, hviFilter, wireframe, relativeColors, displayScore, heatmap, showHeatmap, heatOpacity, showOnlyHighestVulnerable]);
 
   const hp = hovered?.properties;
   const hScore = hp ? (hp.hvi_score ?? hp.vulnerability_score ?? 5.0) : null;
@@ -398,6 +436,20 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
       {/* Selected building inspector */}
       {selected && (
         <div className="deck-inspector">
+          {/* Retrofit Priority Badge */}
+          {(selected.hvi_score ?? 5) >= 6.5 && (
+            <div className="retrofit-priority-badge" style={{ borderColor: getHVIColorHex(displayScore(selected.hvi_score ?? 5)), backgroundColor: `${getHVIColorHex(displayScore(selected.hvi_score ?? 5))}20` }}>
+              <div className="retrofit-priority-header">
+                <span className="retrofit-priority-icon">⚠️ RETROFIT PRIORITY</span>
+              </div>
+              <div className="retrofit-priority-score" style={{ color: getHVIColorHex(displayScore(selected.hvi_score ?? 5)) }}>
+                HVI {(selected.hvi_score ?? 5).toFixed(1)}
+              </div>
+              <div className="retrofit-priority-message">
+                Start here: This building needs retrofitting first.
+              </div>
+            </div>
+          )}
           <div className="deck-inspector-header">
             <div>
               <div className="deck-inspector-title">Building inspector</div>

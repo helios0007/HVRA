@@ -172,54 +172,13 @@ async def analyze_zone_vulnerability(zone_geojson: Dict, center: List[float]) ->
         else:
             print(f"[POLYGON] ERROR: Invalid coordinates structure")
 
-    # Step 1: Fetch geometry layers in the zone and buffer zone (300m buffer for context buildings).
-    # First, create buffer zone for fetching context buildings
-    buffer_zone_polygon = _create_buffer_zone(zone_geojson, buffer_meters=150)
-
-    # Convert buffer polygon back to GeoJSON for API call
-    buffer_zone_geojson = None
-    if buffer_zone_polygon:
-        exterior_coords = list(buffer_zone_polygon.exterior.coords)
-        buffer_zone_geojson = {
-            "type": "Polygon",
-            "coordinates": [exterior_coords]
-        }
-
-    # Fetch buildings from zone (for thermal analysis)
+    # Step 1: Fetch buildings from zone only (skip context/buffer buildings for now)
     area = await asyncio.to_thread(client.buildings.get_area, zone_geojson)
-    print(f"[INFRARED FETCH] Zone buildings returned: {len(area.buildings) if area.buildings else 0}")
     if not area.buildings:
         raise ValueError(f"No buildings found in zone at ({lat}, {lon})")
 
-    # NOTE: local_bounds will be calculated from zone buildings after separation
-    # This ensures we calculate bounds from ONLY the actual zone buildings, not context buildings
-    # But we need a rough initial value for coordinate transformation during separation
+    all_zone_buildings = area.buildings
     local_bounds = None
-
-    # Fetch buildings from buffer zone for context
-    buffer_area = None
-    if buffer_zone_geojson:
-        print(f"[INFRARED FETCH] Requesting buffer zone buildings from: {buffer_zone_geojson}")
-        with open('/tmp/buffer_debug.log', 'a') as f:
-            f.write(f"\n=== BUFFER ZONE FETCH ===\n")
-            f.write(f"Zone building count: {len(area.buildings) if area.buildings else 0}\n")
-            f.write(f"Buffer zone geojson: {buffer_zone_geojson}\n")
-        try:
-            buffer_area = await asyncio.to_thread(client.buildings.get_area, buffer_zone_geojson)
-            buffer_count = len(buffer_area.buildings) if buffer_area and buffer_area.buildings else 0
-            print(f"[INFRARED FETCH] Buffer zone buildings returned: {buffer_count}")
-            with open('/tmp/buffer_debug.log', 'a') as f:
-                f.write(f"Buffer fetch returned: {buffer_count} buildings\n")
-                if buffer_area and buffer_area.buildings:
-                    f.write(f"Buffer area buildings type: {type(buffer_area.buildings)}\n")
-                    if isinstance(buffer_area.buildings, dict):
-                        f.write(f"First 3 building IDs: {list(buffer_area.buildings.keys())[:3]}\n")
-        except Exception as buf_error:
-            print(f"[INFRARED FETCH] ERROR fetching buffer zone: {buf_error}")
-            with open('/tmp/buffer_debug.log', 'a') as f:
-                f.write(f"ERROR fetching buffer zone: {buf_error}\n")
-                import traceback
-                f.write(traceback.format_exc())
 
     vegetation = await asyncio.to_thread(client.vegetation.get_area, zone_geojson)
     ground_materials = await asyncio.to_thread(client.ground_materials.get_area, zone_geojson)
@@ -398,108 +357,21 @@ async def analyze_zone_vulnerability(zone_geojson: Dict, center: List[float]) ->
     bounds_dict = _extract_bounds(utci_result.bounds)
     print(f"[SDK BOUNDS] {bounds_dict}")
 
-    # Convert building data to Three.js geometry format + separate zone vs buffer buildings
+    # Convert building data to Three.js geometry format (zone only, no buffer)
     all_zone_buildings = area.buildings
+    all_buffer_buildings = {}  # Empty for now
 
-    # FIRST PASS: Calculate rough local_bounds from ZONE BUILDINGS ONLY
-    # This is used for coordinate transformation during separation
-    # Collect only zone building coordinates (not buffer buildings)
-    zone_only_x = []
-    zone_only_y = []
-    for idx, building in enumerate(area.buildings.values() if isinstance(area.buildings, dict) else area.buildings):
-        if hasattr(building, 'coordinates') and building.coordinates and len(building.coordinates) >= 2:
-            zone_only_x.append(building.coordinates[0])
-            zone_only_y.append(building.coordinates[1])
-
-    # Calculate bounds using only the visible zone buildings from area.buildings
-    # This will be refined after geometric separation if buffer_area exists
-    if zone_only_x and zone_only_y:
-        local_bounds = {
-            "x_min": min(zone_only_x),
-            "x_max": max(zone_only_x),
-            "y_min": min(zone_only_y),
-            "y_max": max(zone_only_y)
-        }
-        print(f"[ANALYZE] Initial local_bounds from {len(area.buildings)} zone buildings: X=[{local_bounds['x_min']:.2f}, {local_bounds['x_max']:.2f}], Y=[{local_bounds['y_min']:.2f}, {local_bounds['y_max']:.2f}]")
-    else:
-        print(f"[ANALYZE] WARNING: Could not calculate initial local_bounds")
-
-    # Handle buffer_area.buildings — extract only context buildings (outside zone)
-    all_buffer_buildings = {}
-    zone_building_ids = set()  # Initialize here to track zone buildings for local_bounds calculation
-    print(f"[BUFFER_BUILDINGS] Starting separation logic...")
-    print(f"[BUFFER_BUILDINGS] buffer_area is None: {buffer_area is None}")
-    print(f"[BUFFER_BUILDINGS] buffer_area.buildings is None: {buffer_area.buildings is None if buffer_area else 'N/A'}")
-    print(f"[BUFFER_BUILDINGS] buffer_area.buildings len: {len(buffer_area.buildings) if buffer_area and buffer_area.buildings else 0}")
-
-    if buffer_area and buffer_area.buildings:
-        all_buffer_buildings_full = buffer_area.buildings
-        print(f"[BUFFER_BUILDINGS] buffer_area exists with {len(all_buffer_buildings_full)} total buildings")
-        print(f"[BUFFER_BUILDINGS] all_zone_buildings type: {type(all_zone_buildings)}, len: {len(all_zone_buildings)}")
-
-        # Now separate zone buildings from context buildings using geometric test
-        try:
-            zone_polygon = Polygon(_extract_coords_from_geojson(zone_geojson))
-            buffer_polygon = _create_buffer_zone(zone_geojson, buffer_meters=150)
-            zone_bounds = _extract_zone_bounds(zone_geojson)
-            print(f"[BUFFER_BUILDINGS] Created zone and buffer polygons, zone_bounds={zone_bounds}")
-            for idx, building in enumerate(all_zone_buildings.values() if isinstance(all_zone_buildings, dict) else all_zone_buildings):
-                # Get building centroid (Infrared SDK buildings have coordinates attribute)
-                if hasattr(building, 'coordinates') and building.coordinates and len(building.coordinates) >= 3:
-                    # Extract x, y from coordinates array (every 3 elements: x, y, z) and TRANSFORM to geographic
-                    x_local, y_local = building.coordinates[0], building.coordinates[1]
-                    x_geo, y_geo = _local_to_geographic(x_local, y_local, zone_bounds, local_bounds)
-                    centroid = Point(x_geo, y_geo)
-                    if zone_polygon.contains(centroid):
-                        # Store the INDEX (not building.id) so it matches dictionary keys later
-                        zone_building_ids.add(idx)
-                        if idx < 3:
-                            print(f"  Zone building {idx}: local=({x_local:.1f}, {y_local:.1f}) -> geo=({x_geo:.5f}, {y_geo:.5f})")
-
-            print(f"[BUFFER_BUILDINGS] Identified {len(zone_building_ids)} zone building IDs")
-
-            # Filter buffer buildings to only include those NOT in zone
-            context_count = 0
-            for buf_idx, building in enumerate(all_buffer_buildings_full.values() if isinstance(all_buffer_buildings_full, dict) else all_buffer_buildings_full):
-                if buf_idx not in zone_building_ids:
-                    # Check if building is in buffer zone (should be, but double-check)
-                    if hasattr(building, 'coordinates') and building.coordinates and len(building.coordinates) >= 3:
-                        x_local, y_local = building.coordinates[0], building.coordinates[1]
-                        x_geo, y_geo = _local_to_geographic(x_local, y_local, zone_bounds, local_bounds)
-                        centroid = Point(x_geo, y_geo)
-                        if buffer_polygon and buffer_polygon.contains(centroid):
-                            # Keep buffer buildings with their original buffer zone index
-                            all_buffer_buildings[buf_idx] = building
-                            context_count += 1
-
-            print(f"[BUFFER_BUILDINGS] Extracted {len(all_buffer_buildings)} context buildings (outside zone)")
-        except Exception as e:
-            print(f"[BUFFER_BUILDINGS] ERROR during separation: {e}")
-            import traceback
-            traceback.print_exc()
-    else:
-        print(f"[BUFFER_BUILDINGS] buffer_area is None or has no buildings")
-
-    # NOW calculate local_bounds from ONLY the actual zone buildings (after separation)
-    # Extract zone building objects using the zone_building_ids identified during separation
-    # This ensures bounds are calculated from the correct subset, not including context buildings
+    # Calculate local_bounds from zone buildings
     zone_only_x_coords = []
     zone_only_y_coords = []
-    actual_zone_buildings = {}
+    for building in (all_zone_buildings.values() if isinstance(all_zone_buildings, dict) else all_zone_buildings):
+        if hasattr(building, 'coordinates') and building.coordinates:
+            coords_array = building.coordinates
+            for j in range(0, len(coords_array), 3):
+                if j + 2 < len(coords_array):
+                    zone_only_x_coords.append(coords_array[j])
+                    zone_only_y_coords.append(coords_array[j + 1])
 
-    if zone_building_ids:
-        for idx, building in enumerate(all_zone_buildings.values() if isinstance(all_zone_buildings, dict) else all_zone_buildings):
-            if idx in zone_building_ids:
-                actual_zone_buildings[idx] = building
-                # Collect coordinates from zone buildings only
-                if hasattr(building, 'coordinates') and building.coordinates:
-                    coords_array = building.coordinates
-                    for j in range(0, len(coords_array), 3):
-                        if j + 2 < len(coords_array):
-                            zone_only_x_coords.append(coords_array[j])
-                            zone_only_y_coords.append(coords_array[j + 1])
-
-    # Calculate local_bounds from ONLY the zone buildings
     if zone_only_x_coords and zone_only_y_coords:
         local_bounds = {
             "x_min": min(zone_only_x_coords),
@@ -507,41 +379,15 @@ async def analyze_zone_vulnerability(zone_geojson: Dict, center: List[float]) ->
             "y_min": min(zone_only_y_coords),
             "y_max": max(zone_only_y_coords)
         }
-        print(f"[LOCAL_BOUNDS] RECALCULATED from {len(actual_zone_buildings)} zone buildings ({len(zone_only_x_coords)} coords): X=[{local_bounds['x_min']:.2f}, {local_bounds['x_max']:.2f}], Y=[{local_bounds['y_min']:.2f}, {local_bounds['y_max']:.2f}]")
-        # Replace all_zone_buildings with only the zone buildings (not context buildings)
-        all_zone_buildings = actual_zone_buildings
     else:
-        print(f"[LOCAL_BOUNDS] WARNING: Could not separate buildings, using all {len(all_zone_buildings)} buildings for bounds")
-        # Fallback: calculate from all buildings if zone separation failed
-        all_x_coords = []
-        all_y_coords = []
-        for building in (all_zone_buildings.values() if isinstance(all_zone_buildings, dict) else all_zone_buildings):
-            if hasattr(building, 'coordinates') and building.coordinates:
-                coords_array = building.coordinates
-                for j in range(0, len(coords_array), 3):
-                    if j + 2 < len(coords_array):
-                        all_x_coords.append(coords_array[j])
-                        all_y_coords.append(coords_array[j + 1])
-        if all_x_coords and all_y_coords:
-            local_bounds = {
-                "x_min": min(all_x_coords),
-                "x_max": max(all_x_coords),
-                "y_min": min(all_y_coords),
-                "y_max": max(all_y_coords)
-            }
-
-    print(f"[ANALYZE_ZONE] Converting {len(all_zone_buildings)} zone buildings + {len(all_buffer_buildings)} buffer buildings to geometry")
-    with open('/tmp/buffer_debug.log', 'a') as f:
-        f.write(f"[ANALYZE_ZONE] Before conversion: zone={len(all_zone_buildings)}, buffer={len(all_buffer_buildings)}\n")
+        local_bounds = None
 
     # Per-building vulnerability scores from the UTCI grid (when available)
     vulnerability_map = {}
     zone_buildings_geojson = None
-    buffer_buildings_geojson = None
 
     if utci_grid is not None and utci_result is not None:
         # Score zone buildings (affected by thermal analysis)
-        # Pass pre-calculated local_bounds to ensure consistent coordinate transformation
         zone_buildings_geojson = _buildings_to_geojson(all_zone_buildings, zone_geojson, local_bounds)
         zone_buildings_geojson = _add_building_vulnerability_scores(
             zone_buildings_geojson,
@@ -551,43 +397,14 @@ async def analyze_zone_vulnerability(zone_geojson: Dict, center: List[float]) ->
             grid_max
         )
 
-        # Score buffer buildings (use grid values, but mark as context)
-        # Pass pre-calculated local_bounds for consistent transformation
-        if all_buffer_buildings:
-            buffer_buildings_geojson = _buildings_to_geojson(all_buffer_buildings, zone_geojson, local_bounds)
-        else:
-            buffer_buildings_geojson = None
-
-        # Collect vulnerability map for all buildings
-        for geojson in [zone_buildings_geojson, buffer_buildings_geojson]:
-            if geojson:
-                for feature in geojson.get('features', []):
-                    building_id = feature.get('properties', {}).get('id') or feature.get('id', str(len(vulnerability_map)))
-                    vulnerability_map[str(building_id)] = feature.get('properties', {}).get('vulnerability_score', 5.0)
-
-    print(f"[VULNERABILITY SCORECARD] Mapped {len(vulnerability_map)} buildings with scores")
+        # Collect vulnerability map for buildings
+        for feature in zone_buildings_geojson.get('features', []):
+            building_id = feature.get('properties', {}).get('id') or feature.get('id', str(len(vulnerability_map)))
+            vulnerability_map[str(building_id)] = feature.get('properties', {}).get('vulnerability_score', 5.0)
 
     # Convert to Three.js geometry with vulnerability scores
-    # Pass pre-calculated local_bounds for consistent coordinate transformation
-    with open('/tmp/buffer_debug.log', 'a') as f:
-        f.write(f"[THREE_JS] About to convert zone buildings: {len(all_zone_buildings)} buildings\n")
     zone_buildings_threejs = _buildings_to_threejs_geometry(all_zone_buildings, zone_geojson, vulnerability_map, local_bounds=local_bounds)
-    with open('/tmp/buffer_debug.log', 'a') as f:
-        f.write(f"[THREE_JS] Zone conversion result: {zone_buildings_threejs['count']} features\n")
-
     buffer_buildings_threejs = None
-    if all_buffer_buildings and buffer_zone_geojson:
-        with open('/tmp/buffer_debug.log', 'a') as f:
-            f.write(f"[THREE_JS] About to convert buffer buildings: {len(all_buffer_buildings)} buildings\n")
-        # CRITICAL: Use zone_geojson (not buffer_zone_geojson) for coordinate transformation
-        # Buffer buildings are in the same local coordinate space as zone buildings,
-        # so they must use the same geographic reference frame for proper alignment
-        # Pass pre-calculated local_bounds for consistent transformation
-        buffer_buildings_threejs = _buildings_to_threejs_geometry(all_buffer_buildings, zone_geojson, vulnerability_map, is_buffer_zone=True, local_bounds=local_bounds)
-        with open('/tmp/buffer_debug.log', 'a') as f:
-            f.write(f"[THREE_JS] Buffer conversion result: {buffer_buildings_threejs['count']} features\n")
-
-    print(f"[THREE_JS CONVERSION] Zone: {zone_buildings_threejs['count']}, Buffer: {buffer_buildings_threejs['count'] if buffer_buildings_threejs else 0}")
 
     return {
         "score": round(vulnerability_score, 1),
@@ -650,35 +467,31 @@ def _extract_zone_bounds(zone_geojson: Dict) -> Dict:
 
 def _local_to_geographic(local_x: float, local_y: float, zone_bounds: Dict, local_bounds: Dict = None) -> tuple:
     """
-    Transform building coordinates to geographic lon/lat.
+    Transform Infrared building coordinates to geographic lon/lat.
 
-    Infrared SDK returns coordinates in a local meter space (typically centered or relative
-    to analysis area, not the zone's SW corner). We normalize to zone space then transform.
+    Infrared's buildings.get_area() returns vertices in "polygon-bbox-SW meter
+    space" (documented in the SDK): meters EAST (x) and NORTH (y) of the zone
+    bounding box's SW corner, i.e. (min_lon, min_lat). The SDK's tile grid is
+    built from that same SW corner, and longitude is scaled by the zone's
+    CENTER latitude (infrared_sdk/tiling/tiles.py + transforms.lonlat_to_meters):
+        x = (lon - min_lon) * 111320 * cos(center_lat)
+        y = (lat - min_lat) * 111320
+    We invert exactly that — nothing more.
 
-    DEBUG: If buildings are misaligned, check:
-    1. Is local_x the easting (horizontal/X) and local_y the northing (vertical/Y)?
-    2. Is zone_bounds actually [west, south, east, north] in [lon, lat]?
-    3. Is local_bounds the min/max of ALL zone buildings (not including context)?
+    IMPORTANT: do NOT subtract the building min (local_bounds) or rescale to the
+    zone span. The coordinates already share the zone's SW origin, so any
+    normalization shifts/squashes every footprint off its true location (the
+    SW-most building is not at the zone SW corner — there is a street/gap there).
+    local_bounds is accepted only for call-site compatibility and is unused.
     """
     import math
 
-    # Normalize: subtract minimum to get true local space starting from (0,0)
-    # This maps the local coordinate system so its origin aligns with zone's SW corner
-    if local_bounds:
-        norm_x = local_x - local_bounds['x_min']
-        norm_y = local_y - local_bounds['y_min']
-    else:
-        norm_x = local_x
-        norm_y = local_y
-
-    # Use meter-based transformation
-    lat0 = zone_bounds['south']
     meters_per_deg_lat = 111320.0
-    meters_per_deg_lon = 111320.0 * math.cos(math.radians(lat0))
+    center_lat = (zone_bounds['south'] + zone_bounds['north']) / 2.0
+    meters_per_deg_lon = 111320.0 * math.cos(math.radians(center_lat))
 
-    # Apply transformation: zone SW corner + normalized local coords in degrees
-    geo_x = zone_bounds['west'] + norm_x / meters_per_deg_lon
-    geo_y = zone_bounds['south'] + norm_y / meters_per_deg_lat
+    geo_x = zone_bounds['west'] + local_x / meters_per_deg_lon
+    geo_y = zone_bounds['south'] + local_y / meters_per_deg_lat
 
     return [geo_x, geo_y]
 
@@ -1263,10 +1076,9 @@ def _buildings_to_threejs_geometry(buildings_list, zone_geojson: Dict, vulnerabi
                 print(f"[THREE_JS] Center: [{center_lon}, {center_lat}]")
                 print(f"[THREE_JS] ===== END DEBUG =====")
 
-            # Keep only buildings inside the drawn zone (unless this is the buffer zone)
-            if not is_buffer_zone and zone_poly is not None and not zone_poly.contains(Point(center_lon, center_lat)):
-                skipped_outside += 1
-                continue
+            # NOTE: Buildings passed here have already been filtered during separation phase.
+            # We trust the separation logic and don't re-check containment, since polygon
+            # centroid may differ from the point used during separation, causing false rejections.
 
             vuln_score = vulnerability_scores.get(building_id, 5.0) if vulnerability_scores else 5.0
 
@@ -1299,3 +1111,4 @@ def _buildings_to_threejs_geometry(buildings_list, zone_geojson: Dict, vulnerabi
 def calculate_driver_severity(zone_geojson: Dict, driver_name: str) -> float:
     """Calculate severity of a specific vulnerability driver."""
     return 0.5
+

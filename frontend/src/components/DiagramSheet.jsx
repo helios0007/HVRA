@@ -50,7 +50,7 @@ const HOURS = [
   { label: '🌙 Night', value: 'night' },
 ];
 
-export default function DiagramSheet({ buildings, contextBuildings, whatIfBuildings, activeIds, zoneFactors, zoneBounds, peakUtci = 34, showOnlyHighestVulnerable, onToggleHighestVulnerable, onClose }) {
+export default function DiagramSheet({ buildings, contextBuildings, whatIfBuildings, activeIds, zoneFactors, zoneBounds, peakUtci = 34, onClose }) {
   const [orientation, setOrientation] = useState('NS');
   const [position, setPosition] = useState(0.5);
   const [solarHour, setSolarHour] = useState(15);
@@ -64,16 +64,7 @@ export default function DiagramSheet({ buildings, contextBuildings, whatIfBuildi
   // Landsat zone mean LST recovered from the factor score (score = (T−30)/18)
   const zoneLstC = 30 + (zoneFactors?.lst?.score ?? 0.6) * 18;
 
-  // Filter buildings: if showOnlyHighestVulnerable, show only the highest HVI building (grey out others in viz)
-  const filteredBuildings = useMemo(() => {
-    if (!showOnlyHighestVulnerable || !buildings?.features) return buildings;
-    const maxBuilding = buildings.features.reduce((max, f) => {
-      const fHvi = f.properties?.hvi_score ?? 0;
-      const maxHvi = max.properties?.hvi_score ?? 0;
-      return fHvi > maxHvi ? f : max;
-    });
-    return { ...buildings, features: [maxBuilding] };
-  }, [buildings, showOnlyHighestVulnerable]);
+  const filteredBuildings = buildings;
 
   const apartment = useMemo(
     () => buildApartment(filteredBuildings, activeIds, peakUtci),
@@ -139,15 +130,6 @@ export default function DiagramSheet({ buildings, contextBuildings, whatIfBuildi
                   onClick={() => setSolarHour(h.value)}>{h.label}</button>
               ))}
             </div>
-          </div>
-          <div className="diagram-control">
-            <button
-              className={`diagram-toggle ${showOnlyHighestVulnerable ? 'on' : ''}`}
-              onClick={onToggleHighestVulnerable}
-              title="Show only the highest vulnerable building"
-            >
-              {showOnlyHighestVulnerable ? '🔴 Highest HVI Only' : '⚪ All Buildings'}
-            </button>
           </div>
         </div>
 

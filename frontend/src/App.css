@@ -829,6 +829,45 @@ body {
 
 .deck-inspector-empty { font-size: 12px; color: var(--text-muted); }
 
+/* Retrofit Priority Badge */
+.retrofit-priority-badge {
+  border-left: 4px solid;
+  border-radius: 4px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  background-color: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+}
+
+.retrofit-priority-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.retrofit-priority-icon {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: currentColor;
+}
+
+.retrofit-priority-score {
+  font-size: 32px;
+  font-weight: 900;
+  margin-bottom: 4px;
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+
+.retrofit-priority-message {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
 /* ---------- Climate context cards ---------- */
 .climate-grid {
   display: grid;
@@ -1184,6 +1223,28 @@ body {
   color: #94a3b8;
 }
 .diagram-control input[type='range'] { width: 100%; accent-color: #3b82f6; }
+
+.diagram-toggle {
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 2px solid #3a3f4d;
+  background: transparent;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.diagram-toggle:hover {
+  border-color: #2563eb;
+  color: #fff;
+}
+.diagram-toggle.on {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
 .diagram-chips { display: flex; gap: 6px; }
 .diagram-chips button {
   padding: 5px 12px;
