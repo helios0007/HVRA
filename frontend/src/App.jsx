@@ -7,7 +7,7 @@ import DiagramSheet from './components/DiagramSheet';
 import LandingPage from './components/LandingPage';
 import BuildingAnalysisTab from './components/BuildingAnalysisTab';
 import {
-  IconOasis, IconPencil, IconCube, IconMap, IconThermometer,
+  IconPencil, IconCube, IconMap, IconThermometer,
   IconBulb, IconBuilding, IconFlame, IconCityscape,
 } from './components/Icons';
 import {
@@ -719,7 +719,7 @@ export default function App() {
       {/* Header */}
       <header className="app-header">
         <div className="app-brand" onClick={() => setShowLanding(true)} style={{ cursor: 'pointer' }} title="Back to home">
-          <span className="app-logo"><IconOasis size={20} /> OASIS</span>
+          <img className="app-logo-img" src="/oasis-logo.png" alt="OASIS" />
           <span className="app-subtitle">Overheating Assessment System for Intervention Strategies · Barcelona</span>
         </div>
         <div className="app-status">
