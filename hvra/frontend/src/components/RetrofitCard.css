@@ -1,0 +1,309 @@
+.retrofit-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+  background: var(--surface);
+}
+
+.retrofit-card.rank-1 { border-left: 3px solid #c0392b; }
+.retrofit-card.rank-2 { border-left: 3px solid #e67e22; }
+.retrofit-card.rank-3 { border-left: 3px solid #27ae60; }
+
+.rc-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+  background: #fafaf8;
+  user-select: none;
+}
+
+.rc-header:hover { background: #f0efec; }
+
+.rc-rank {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.rc-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+}
+
+.rc-chevron {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.rc-metrics {
+  display: flex;
+  border-top: 1px solid var(--border);
+}
+
+.metric {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.4rem 0.25rem;
+  border-right: 1px solid var(--border);
+}
+
+.metric:last-child { border-right: none; }
+
+.metric-val {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.metric-lbl {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.rc-body {
+  padding: 0.75rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.rc-justification {
+  font-size: 0.8rem;
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.rc-feasibility {
+  background: #fffbf0;
+  border: 1px solid #ffe9a0;
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+}
+
+.rc-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #b7791f;
+  margin-bottom: 2px;
+}
+
+.rc-feasibility p {
+  font-size: 0.78rem;
+  color: #744210;
+  line-height: 1.5;
+}
+
+.rc-source {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.45;
+}
+
+.rc-alternates {
+  background: #f4f6fb;
+  border: 1px solid #dde3f0;
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem;
+}
+
+.rc-alt-note {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin-bottom: 0.4rem;
+}
+
+.rc-alt-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 3px 0;
+  border-top: 1px solid #e3e8f2;
+}
+
+.rc-alt-item:first-of-type {
+  border-top: none;
+}
+
+.rc-alt-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.rc-alt-metrics {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.rc-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.rc-cat-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.rc-highlight-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.rc-highlight-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.rc-flag-urban,
+.rc-flag-operational {
+  font-size: 0.75rem;
+  color: #555;
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  line-height: 1.5;
+}
+
+/* ── Category C: ventilation pairing legend ── */
+.rc-vent-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #f0fbf8;
+  border: 1px solid #b8e6db;
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem;
+}
+
+.rc-vent-title {
+  font-size: 0.74rem;
+  color: #0e6655;
+  margin: 0 0 2px 0;
+}
+
+.rc-vent-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: #333;
+}
+
+.rc-vent-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(0,0,0,0.15);
+}
+
+.rc-vent-wind {
+  font-size: 0.7rem;
+  color: #0e6655;
+  font-style: italic;
+  margin: 3px 0 0 0;
+}
+
+.rc-vent-warn {
+  font-size: 0.74rem;
+  color: #7d6608;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ── Category C: protocol schedule table ── */
+.rc-schedule {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+}
+
+.rc-schedule th {
+  text-align: left;
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  background: #f5f4f1;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+}
+
+.rc-schedule td {
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.rc-sched-time {
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.rc-sched-cond {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ── Louver sketch ── */
+.louver-sketch {
+  background: #fafaf9;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem;
+}
+
+.ls-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin: 0 0 4px 0;
+}
+
+.ls-note {
+  font-size: 0.7rem;
+  color: #92400e;
+  font-style: italic;
+  margin: 4px 0 0 0;
+}
