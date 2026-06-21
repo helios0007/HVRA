@@ -22,7 +22,9 @@ import {
 import { computeWhatIfHeatmap } from './utils/heatmapWhatIf';
 import { computeRegenerativeImpact } from './utils/regenerativeImpact';
 import { applyClimateScenario, compareScenarios, CLIMATE_SCENARIOS } from './utils/climateScenario';
-import { REGEN_TAGS } from './data/interventionCatalog';
+import { REGEN_TAGS, INTERVENTION_CATALOG } from './data/interventionCatalog';
+
+const CATALOG_BY_ID = Object.fromEntries(INTERVENTION_CATALOG.map((iv) => [iv.id, iv]));
 import './App.css';
 
 // Explanations and recommended interventions per vulnerability driver
@@ -270,7 +272,8 @@ function HVIScaleLegend({ score }) {
   return (
     <div className="hvi-scale-legend">
       <h4>
-        HVI risk thresholds <span className="section-hint">(index 0–10)</span>
+        Heat Vulnerability Index (HVI)
+        <span className="section-hint"> · 0–10 index points (not °C, not 0–100)</span>
       </h4>
       {HVI_TIERS.map((t) => {
         const active = score !== undefined && score >= t.min && score < t.max;
@@ -283,6 +286,11 @@ function HVIScaleLegend({ score }) {
           </div>
         );
       })}
+      <p className="hvi-scale-foot">
+        Below <strong>{SAFE_THRESHOLD.toFixed(1)}</strong> → no intervention needed.
+        At/above <strong>{BUILDING_GATE.toFixed(1)}</strong> after street-level measures →
+        building-level retrofit warranted (the decision gate).
+      </p>
     </div>
   );
 }
@@ -436,6 +444,16 @@ export default function App() {
   const [showLanding, setShowLanding] = useState(true);
   const [showOnlyHighestVulnerable, setShowOnlyHighestVulnerable] = useState(false);
   const [showContextHvi, setShowContextHvi] = useState(false); // color out-of-zone buildings by HVI
+  const [interventionScope, setInterventionScope] = useState('all'); // 'all' | 'interior'
+
+  // Declaring "inside only" both filters the menu and drops any already-selected
+  // exterior measures, so the simulation reflects what the resident can do.
+  const setScope = (s) => {
+    setInterventionScope(s);
+    if (s === 'interior') {
+      setActiveInterventions((prev) => prev.filter((id) => CATALOG_BY_ID[id]?.scope === 'interior'));
+    }
+  };
 
   const toggleIntervention = (id) => {
     setActiveInterventions((prev) =>
@@ -1028,6 +1046,21 @@ export default function App() {
                 <h3>Design interventions</h3>
                 <p>Toggle measures to see the zone recolor with the projected HVI. Effects use published cooling coefficients.</p>
 
+                {/* Scope gate — most condominium tenants cannot touch the exterior */}
+                <div className="scope-control">
+                  <label className="scope-control-label">What can you modify?</label>
+                  <div className="diagram-chips">
+                    <button className={interventionScope === 'all' ? 'on' : ''} onClick={() => setScope('all')}
+                      title="Show interior + exterior measures">
+                      🏗️ Exterior available
+                    </button>
+                    <button className={interventionScope === 'interior' ? 'on' : ''} onClick={() => setScope('interior')}
+                      title="Only measures a tenant can apply inside the unit (~85% of condos)">
+                      🪟 Inside only
+                    </button>
+                  </div>
+                </div>
+
                 <ScenarioToggle scenario={scenario} setScenario={setScenario} compare={climateCompare} />
 
                 {/* Headline: health capital, not degrees */}
@@ -1082,8 +1115,10 @@ export default function App() {
                   📐 Generate climatic diagrams
                 </button>
 
-                {/* Ranked intervention cards */}
-                {zoneRanking.map(({ intervention: iv, affected, meanZoneDelta }) => {
+                {/* Ranked intervention cards (filtered by declared scope) */}
+                {zoneRanking
+                  .filter(({ intervention: iv }) => interventionScope === 'all' || iv.scope === 'interior')
+                  .map(({ intervention: iv, affected, meanZoneDelta }) => {
                   const active = activeInterventions.includes(iv.id);
                   return (
                     <div

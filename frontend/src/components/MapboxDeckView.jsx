@@ -5,7 +5,7 @@ import { GeoJsonLayer, PolygonLayer, BitmapLayer } from '@deck.gl/layers';
 import { booleanPointInPolygon, centroid as turfCentroid } from '@turf/turf';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import FactorBreakdown from './FactorBreakdown';
-import { getHVIColorRGB, getHVIColorHex, riskLabel, HVI_GRADIENT_CSS } from '../utils/hviColors';
+import { getHVIColorRGB, getHVIColorHex, riskLabel, HVI_GRADIENT_CSS, clippedRange } from '../utils/hviColors';
 import { rankInterventionsForBuilding } from '../utils/interventionEngine';
 
 function buildingsToGeoJSON(buildingData) {
@@ -125,7 +125,8 @@ export default function MapboxDeckView({ zoneBuildings, bufferZoneBuildings, bui
     const feats = (hviData?.buildings_with_hvi || buildingData)?.features || [];
     if (!feats.length) return [0, 10];
     const scores = feats.map((f) => f.properties.hvi_score ?? f.properties.vulnerability_score ?? 5);
-    return [Math.min(...scores), Math.max(...scores)];
+    // Clip ~10% off each tail so outliers don't flatten the contrast.
+    return clippedRange(scores, 0.1);
   }, [hviData, buildingData]);
 
   // Get all zone buildings and identify the highest HVI one

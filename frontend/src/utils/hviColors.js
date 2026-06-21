@@ -2,13 +2,18 @@
 // Used by the 3D explorer, the 2D HVI map, and the side panels so every
 // view shows exactly the same color for the same score.
 
+// Sequential ColorBrewer YlOrRd: pale (low vulnerability) → deep red (high).
+// Tuned so the realistic urban band (≈4–7) spans orange→red for strong on-screen
+// contrast — a flat 4.9–6.1 zone now reads clearly instead of "all orange".
 export const HVI_STOPS = [
-  [0, [144, 238, 144]],   // light green
-  [3, [255, 255, 0]],     // yellow
-  [4, [255, 165, 0]],     // orange
-  [6, [255, 69, 0]],      // orange-red
-  [8, [139, 0, 0]],       // dark red
-  [10, [139, 0, 0]],
+  [0, [255, 255, 204]],   // #ffffcc  pale yellow (near-white)
+  [3, [255, 237, 160]],   // #ffeda0
+  [4, [254, 178, 76]],    // #feb24c  orange
+  [5, [253, 141, 60]],    // #fd8d3c
+  [6, [252, 78, 42]],     // #fc4e2a  orange-red
+  [7, [227, 26, 28]],     // #e31a1c  red
+  [8.5, [177, 0, 38]],    // #b10026
+  [10, [128, 0, 38]],     // #800026  deep red
 ];
 
 // Continuous interpolation across the legend hues (absolute 0-10 scale)
@@ -34,18 +39,29 @@ export function getHVIColorHex(score) {
   return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 
+// Risk label aligned to the tier thresholds below (single threshold set).
 export function riskLabel(score) {
   const s = score ?? 5;
-  if (s >= 8) return 'Critical';
-  if (s >= 6) return 'High';
-  if (s >= 4) return 'Medium';
-  if (s >= 3) return 'Low-Medium';
+  if (s >= 7.0) return 'Critical';
+  if (s >= 5.5) return 'High';
+  if (s >= 4.0) return 'Moderate';
   return 'Low';
 }
 
 // CSS gradient matching HVI_STOPS — use for every legend
 export const HVI_GRADIENT_CSS =
-  'linear-gradient(90deg, #90EE90 0%, #FFFF00 30%, #FFA500 40%, #FF4500 60%, #8B0000 80%)';
+  'linear-gradient(90deg, #ffffcc 0%, #ffeda0 30%, #feb24c 40%, #fd8d3c 50%, #fc4e2a 60%, #e31a1c 70%, #b10026 85%, #800026 100%)';
+
+// Clip the extreme tails of a score list and return [low, high] for relative
+// (zone-stretched) coloring, so a couple of outliers don't flatten everything
+// else. Default clips ~10% off each end (advisor request).
+export function clippedRange(scores, tail = 0.1) {
+  const vals = (scores || []).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+  if (vals.length < 4) return vals.length ? [vals[0], vals[vals.length - 1]] : [0, 10];
+  const lo = vals[Math.floor(tail * (vals.length - 1))];
+  const hi = vals[Math.ceil((1 - tail) * (vals.length - 1))];
+  return hi > lo ? [lo, hi] : [vals[0], vals[vals.length - 1]];
+}
 
 // ---- Risk tiers & decision thresholds (single source of truth) ----
 // HVI is a 0–10 composite index (index points, NOT °C).
@@ -56,10 +72,10 @@ export const SAFE_THRESHOLD = 4.0;
 export const BUILDING_GATE = 5.5;
 
 export const HVI_TIERS = [
-  { min: 0, max: 4.0, label: 'Low', color: '#90EE90', action: 'No intervention needed' },
-  { min: 4.0, max: 5.5, label: 'Moderate', color: '#FFA500', action: 'Street-level measures recommended' },
-  { min: 5.5, max: 7.0, label: 'High', color: '#FF4500', action: 'Priority zone — urban + building measures' },
-  { min: 7.0, max: 10, label: 'Critical', color: '#8B0000', action: 'Immediate action — full retrofit pathway' },
+  { min: 0, max: 4.0, label: 'Low', color: '#feb24c', action: 'No intervention needed' },
+  { min: 4.0, max: 5.5, label: 'Moderate', color: '#fd8d3c', action: 'Street-level measures recommended' },
+  { min: 5.5, max: 7.0, label: 'High', color: '#fc4e2a', action: 'Priority zone — urban + building measures' },
+  { min: 7.0, max: 10, label: 'Critical', color: '#b10026', action: 'Immediate action — full retrofit pathway' },
 ];
 
 export function riskTier(score) {

@@ -225,4 +225,88 @@ export const INTERVENTION_CATALOG = [
     giveBack: ['⚠ Adds A/C waste heat to the street', '⚠ Increases peak grid load'],
     applicable: (f) => (f.no_ac?.score ?? 0) >= 0.5,
   },
+
+  // ---- Interior measures (scope: 'interior') ------------------------------
+  // ~85% of condominium residents cannot modify the exterior. These are the
+  // measures a tenant can apply inside their own unit. They don't change the
+  // building's measured envelope/LST, so they act on `no_ac` — the catalog's
+  // proxy for indoor cooling adequacy (same lever used by envelope retrofit).
+  // (Interventions without a `scope` field are treated as exterior.)
+  {
+    id: 'indoor_plants',
+    name: 'Indoor plants & green corners',
+    icon: '🪴',
+    category: 'Interior',
+    scope: 'interior',
+    description: 'Grouped indoor plants cool surfaces by evapotranspiration and improve air quality — a tenant-level measure needing no permission.',
+    evidence: 'Transpiring foliage keeps nearby surfaces ≈4–6°C cooler and raises humidity comfort; also filters indoor air.',
+    source: 'https://www.sciencedirect.com/science/article/pii/S0360132320302076',
+    cost: { level: 'Very low', detail: '€20–150 per room' },
+    timeframe: 'Immediate',
+    coBenefits: ['Air quality', 'Wellbeing', 'No permission needed'],
+    factorDeltas: {
+      no_ac: { add: -0.05 },
+    },
+    regenTags: ['adaptation'],
+    giveBack: ['Cleaner indoor air', 'Humidity comfort for the occupant'],
+    applicable: () => true,
+  },
+  {
+    id: 'cross_ventilation',
+    name: 'Cross-ventilation routine',
+    icon: '🪟',
+    category: 'Interior',
+    scope: 'interior',
+    description: 'Open windows on opposite facades during the cool night/early morning to purge stored heat — zero cost, only behaviour.',
+    evidence: 'Night purge ventilation can cut indoor peak temperature 2–3°C in free-running Mediterranean dwellings.',
+    source: 'https://www.sciencedirect.com/science/article/pii/S0378778818313124',
+    cost: { level: 'Free', detail: '€0 — opening opposite windows' },
+    timeframe: 'Immediate',
+    coBenefits: ['Zero cost', 'No installation', 'Works tonight'],
+    factorDeltas: {
+      no_ac: { add: -0.08 },
+    },
+    regenTags: ['adaptation'],
+    giveBack: ['Free passive cooling', 'No grid load'],
+    applicable: () => true,
+  },
+  {
+    id: 'interior_shading',
+    name: 'Interior blinds & reflective film',
+    icon: '🪟',
+    category: 'Interior',
+    scope: 'interior',
+    description: 'Reflective window film and light internal blinds block solar gain at the glazing on sun-facing rooms.',
+    evidence: 'Interior solar-control measures cut solar heat gain 30–50%, lowering indoor operative temperature on hot afternoons.',
+    source: 'https://www.energy.gov/energysaver/window-treatments',
+    cost: { level: 'Low', detail: '€10–40/m² film; €30–120 per blind' },
+    timeframe: 'Days',
+    coBenefits: ['Glare control', 'Privacy', 'Tenant-installable'],
+    factorDeltas: {
+      no_ac: { add: -0.06 },
+    },
+    regenTags: ['adaptation'],
+    giveBack: ['Less afternoon overheating for the occupant'],
+    applicable: () => true,
+  },
+  {
+    id: 'internal_insulation',
+    name: 'Internal wall / ceiling insulation',
+    icon: '🧱',
+    category: 'Interior',
+    scope: 'interior',
+    description: 'Insulated lining on the inside face of external walls and the top-floor ceiling, where the facade cannot be touched.',
+    evidence: 'Internal insulation reduces envelope heat transfer in pre-1980 stock without altering the protected/heritage facade.',
+    source: 'https://climate-adapt.eea.europa.eu/en/knowledge/tools/urban-ast/step-4-3',
+    cost: { level: 'Medium', detail: '€40–110/m² of treated surface' },
+    timeframe: '1–4 months',
+    coBenefits: ['Winter savings too', 'Keeps facade untouched', 'Condo-friendly'],
+    factorDeltas: {
+      construction_era: { add: -0.10 },
+      no_ac: { add: -0.05 },
+    },
+    regenTags: ['adaptation', 'resilience'],
+    giveBack: ['Keeps the dwelling cooler without A/C', 'No exterior change required'],
+    applicable: (f) => (f.construction_era?.score ?? 0) >= 0.4,
+  },
 ];

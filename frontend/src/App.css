@@ -1298,6 +1298,24 @@ body {
 .toggle-card-metric-value { font-size: 20px; font-weight: 800; color: var(--card-accent); }
 .toggle-card-metric-label { font-size: 10px; color: var(--text-muted, #8a94a6); text-transform: uppercase; letter-spacing: 0.4px; }
 
+.scope-control {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  background: var(--bg-tertiary, #1a1e27);
+  border: 1px solid var(--border-subtle, #2a2f3a);
+  border-radius: 10px;
+}
+.scope-control-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  margin-bottom: 8px;
+}
+.scope-control .diagram-chips button { flex: 1; text-align: center; }
+
 .diagram-chips { display: flex; gap: 6px; }
 .diagram-chips button {
   padding: 5px 12px;
@@ -1390,6 +1408,15 @@ body {
 .hvi-tier-range { color: #94a3b8; font-variant-numeric: tabular-nums; }
 .hvi-tier-label { color: #e2e8f0; font-weight: 600; }
 .hvi-tier-action { color: #94a3b8; }
+.hvi-scale-foot {
+  margin: 9px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid #2a2e3a;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: #94a3b8;
+}
+.hvi-scale-foot strong { color: #e2e8f0; }
 
 /* ===== Decision gate banner ===== */
 .decision-gate {
