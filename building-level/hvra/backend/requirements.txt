@@ -1,0 +1,15 @@
+fastapi==0.111.0
+uvicorn[standard]==0.30.0
+python-multipart==0.0.9
+
+# Stage 2 — Calculation engine
+ifcopenshell
+numpy>=2.0.0,<3.0
+pvlib>=0.11.2
+pandas>=2.2.3,<3.0
+shapely>=2.0.6
+osmnx>=1.9.3,<2.0
+
+# Stage 3 + 4b — LLM diagnosis and shortlist
+anthropic>=0.25.0
+python-dotenv>=1.0.0

@@ -1,0 +1,66 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #f5f4f1;
+  --surface: #ffffff;
+  --surface-2: #f5f4f1;     /* secondary surfaces: file button, code chips, etc. */
+  --surface-3: #ece9e4;     /* hover state on surface-2 */
+  --border: #ddd8cf;
+  --text: #1a1a1a;
+  --text-muted: #6b6660;
+  --accent: #c0392b;
+  --accent-dark: #962d22;
+  --accent-soft: #fdf0ef;   /* light tint behind the accent, e.g. section numbers */
+  --accent-soft-border: #f5c6c3;
+  --success: #2ecc71;
+  --error: #e74c3c;
+  --radius: 8px;
+  --shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+
+  --warn-bg: #fff9e6;
+  --warn-border: #f5d87a;
+  --warn-text: #7a5c00;
+  --error-bg: #fef0ef;
+  --error-border: #f5c6c3;
+  --error-text: #8b1a1a;
+}
+
+/* Dark theme — applied to the intake/form page via <body class="theme-dark"> */
+body.theme-dark {
+  --bg: #14161c;
+  --surface: #1c1f27;
+  --surface-2: #242833;
+  --surface-3: #2d323f;
+  --border: #353b48;
+  --text: #eef0f4;
+  --text-muted: #9aa1b0;
+  --accent: #e0584a;
+  --accent-dark: #c0392b;
+  --accent-soft: #3a2422;
+  --accent-soft-border: #5a352f;
+  --success: #3ddc84;
+  --error: #ff6b5e;
+  --shadow: 0 2px 16px rgba(0, 0, 0, 0.45);
+
+  --warn-bg: #3a3318;
+  --warn-border: #6b5a1f;
+  --warn-text: #ecd07a;
+  --error-bg: #3a2422;
+  --error-border: #6b3a32;
+  --error-text: #ff9b90;
+}
+
+body {
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+  transition: background 0.2s, color 0.2s;
+}
