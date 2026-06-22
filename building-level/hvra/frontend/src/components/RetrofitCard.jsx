@@ -22,6 +22,32 @@ const SHADING_TARGETS = {
   solar_control_glazing:       { orients: ['S', 'SE', 'SW', 'W'], minSolar: 0.5 },
 }
 
+// Strategies eligible for AI rendering — must match backend RENDERABLE_STRATEGIES
+// in analysis/render.py. 'view' tells the card which capture path to use.
+const RENDERABLE = {
+  external_shading_louvers:    'exterior',
+  window_external_shutters:    'exterior',
+  operable_external_sunscreen: 'exterior',
+  green_pergola:                'exterior',
+  window_enlargement:           'exterior',
+  internal_blinds:              'interior',
+}
+
+/** Best facade to use as the render's reference orientation for a strategy. */
+function renderTargetOrientation(strategyId, room) {
+  const facades = room?.facades ?? []
+  if (!facades.length) return ''
+  if (SHADING_TARGETS[strategyId]) {
+    const matches = shadingFacades(strategyId, room)
+    if (matches.length) return matches[0].orientation
+  }
+  // Fall back to whichever facade has the most windows (most visually relevant)
+  const withWindows = [...facades].sort(
+    (a, b) => (b.window_ids?.length ?? 0) - (a.window_ids?.length ?? 0)
+  )
+  return withWindows[0]?.orientation ?? facades[0].orientation ?? ''
+}
+
 // Behavioural ventilation schedules rendered as protocol tables
 const SCHEDULES = {
   cross_ventilation_behaviour: [
@@ -80,91 +106,57 @@ function degToCompass(deg) {
   return octants[Math.round((deg % 360) / 45) % 8]
 }
 
-function angularDist(a, b) {
-  const d = Math.abs(a - b) % 360
-  return d > 180 ? 360 - d : d
+const CROSS_VENT_LABEL = {
+  strong_cross_ventilation:   'Strong cross-ventilation',
+  moderate_cross_ventilation: 'Moderate cross-ventilation',
+  weak_adjacent_ventilation:  'Weak adjacent ventilation',
+  single_sided:               'Single-sided only',
+  indirect_possible:          'Indirect (via connected room)',
+  poor:                       'Poor / none',
+  unknown:                    'Unknown',
 }
 
 /**
- * Group a room's windows by facade orientation, one color per orientation.
- * Windows of the same color are opened together. Groups are ordered by the
- * prevailing summer wind: the façade facing the wind comes first (inlet),
- * so the flow arrow runs windward → leeward.
+ * Build the 3D highlight groups + airflow path for a room from the
+ * backend's cross_ventilation.py diagnosis (crossVent — one entry from
+ * result.cross_ventilation.spaces, matched by room.ifc_global_id).
+ *
+ * Replaces the old client-side window/orientation grouping and straight-line
+ * path guessing: every opening id and every path point here comes directly
+ * from the backend's IFC-aware analysis, so it already respects exterior/
+ * interior wall classification, same-wall vs different-wall windows, and
+ * real door/opening connectivity.
  */
-function ventilationGroups(room, windDeg) {
-  const byOrient = {}
-  for (const f of room?.facades ?? []) {
-    if (!f.window_ids?.length) continue
-    if (!byOrient[f.orientation]) {
-      byOrient[f.orientation] = { ids: [], deg: f.orientation_degrees ?? 0 }
-    }
-    byOrient[f.orientation].ids.push(...f.window_ids)
-  }
-  let groups = Object.entries(byOrient).map(([orientation, g]) => ({
-    orientation,
-    orientationDeg: g.deg,
-    globalIds: g.ids,
+function buildVentPlan(crossVent) {
+  if (!crossVent) return null
+
+  const extOpenings = crossVent.exterior_openings ?? []
+  const groups = extOpenings.map((o, i) => ({
+    orientation: o.orientation_deg != null ? degToCompass(o.orientation_deg) : `opening ${i + 1}`,
+    orientationDeg: o.orientation_deg ?? 0,
+    globalIds: [o.id],
+    // Raw backend centroid for this exact opening — lets the viewer
+    // calibrate the airflow path by exact GlobalId↔coordinate correspondence
+    // instead of "nearest path point" guessing, which breaks down whenever
+    // the model's internal coordinate offset is large relative to the path.
+    refCentroid: o.centroid ?? null,
+    hexColor: VENT_PALETTE[i % VENT_PALETTE.length],
   }))
-  if (windDeg != null && groups.length > 1) {
-    groups = [...groups].sort(
-      (a, b) => angularDist(a.orientationDeg, windDeg) - angularDist(b.orientationDeg, windDeg)
-    )
-  }
-  return groups.map((g, i) => ({ ...g, hexColor: VENT_PALETTE[i % VENT_PALETTE.length] }))
-}
 
-/**
- * Full ventilation visual plan for a room.
- * If the room itself has windows on ≥2 façades → in-room cross-ventilation.
- * If it has only one windowed façade, look for a door-connected neighbouring
- * room with windows on a different façade — cross-ventilation through the
- * open connecting door.
- */
-function buildVentPlan(room, allRooms, windDeg) {
-  const own = ventilationGroups(room, windDeg)
-  const base = {
-    groups: own,
-    crossRoom: false,
-    partnerName: null,
-    doorIds: room?.door_ids ?? [],
-    roomGids: [room?.ifc_global_id].filter(Boolean),
-  }
-  if (own.length !== 1) return base
-
-  const myDoors = new Set(room?.door_ids ?? [])
-  if (!myDoors.size) return base
-
-  let best = null
-  for (const other of allRooms ?? []) {
-    if (other.room_id === room.room_id || other.floor !== room.floor) continue
-    const sharedDoors = (other.door_ids ?? []).filter(d => myDoors.has(d))
-    if (!sharedDoors.length) continue
-    const otherGroups = ventilationGroups(other, windDeg)
-      .filter(g => g.orientation !== own[0].orientation)
-    if (!otherGroups.length) continue
-    // Prefer the most opposite facade (best pressure differential)
-    const score = Math.abs(180 - angularDist(otherGroups[0].orientationDeg, own[0].orientationDeg))
-    if (!best || score < best.score) {
-      best = { other, group: otherGroups[0], sharedDoors, score }
-    }
-  }
-  if (!best) return base
-
-  let groups = [
-    { ...own[0], roomGlobalId: room.ifc_global_id },
-    { ...best.group, roomGlobalId: best.other.ifc_global_id },
-  ]
-  if (windDeg != null) {
-    groups.sort((a, b) => angularDist(a.orientationDeg, windDeg) - angularDist(b.orientationDeg, windDeg))
-  }
-  groups = groups.map((g, i) => ({ ...g, hexColor: VENT_PALETTE[i % VENT_PALETTE.length] }))
+  const doorIds = (crossVent.internal_connections ?? []).map(c => c.opening_id).filter(Boolean)
 
   return {
     groups,
-    crossRoom: true,
-    partnerName: best.other.room_name || best.other.room_id,
-    doorIds: best.sharedDoors,
-    roomGids: [room.ifc_global_id, best.other.ifc_global_id].filter(Boolean),
+    classification: crossVent.classification,
+    classificationLabel: CROSS_VENT_LABEL[crossVent.classification] ?? crossVent.classification,
+    confidence: crossVent.confidence ?? 0,
+    airflowPath: crossVent.airflow_path ?? [],
+    doorIds,
+    doorCentroids: (crossVent.internal_connections ?? [])
+      .map(c => ({ id: c.opening_id, centroid: c.centroid }))
+      .filter(c => c.id && c.centroid),
+    recommendations: crossVent.recommendations ?? [],
+    isIndirect: crossVent.classification === 'indirect_possible',
   }
 }
 
@@ -243,7 +235,7 @@ function approxUValueAfter(uBefore, sectionType) {
 }
 
 
-export default function RetrofitCard({ strategy, room, allRooms = [], roofIds = [], windDeg, onHighlight, onHighlightGroups, onHighlightClear }) {
+export default function RetrofitCard({ strategy, room, roofIds = [], windDeg, crossVent = null, jobId, onHighlight, onHighlightGroups, onHighlightClear, onOpenRender }) {
   const [expanded, setExpanded] = useState(false)
 
   const meta = STRATEGY_META[strategy.strategy_id] ?? {}
@@ -254,7 +246,7 @@ export default function RetrofitCard({ strategy, room, allRooms = [], roofIds = 
   const { layers, uValue, shgc } = pickFacadeLayers(strategy.strategy_id, room)
   const uAfter = meta.sectionType ? approxUValueAfter(uValue, meta.sectionType) : null
 
-  const ventPlan = cat === 'C' ? buildVentPlan(room, allRooms, windDeg) : null
+  const ventPlan = cat === 'C' ? buildVentPlan(crossVent) : null
   const ventGroups = ventPlan?.groups ?? []
   const schedule = SCHEDULES[strategy.strategy_id]
   const louverFacades = strategy.strategy_id === 'external_shading_louvers'
@@ -265,12 +257,18 @@ export default function RetrofitCard({ strategy, room, allRooms = [], roofIds = 
     const next = !expanded
     setExpanded(next)
     if (next) {
-      if (cat === 'C' && ventGroups.length && onHighlightGroups) {
+      // Gate on the airflow path, not the group count — an indirect room
+      // can have zero exterior openings of its own (that's what makes it
+      // indirect: it relies on a connected room's opening) while still
+      // having a valid multi-room path to draw. Gating on ventGroups.length
+      // silently dropped the draw call for exactly those rooms.
+      const hasPath = (ventPlan?.airflowPath?.length ?? 0) >= 2
+      if (cat === 'C' && (ventGroups.length || hasPath) && onHighlightGroups) {
         onHighlightGroups(ventGroups, {
-          drawFlow: true,
+          airflowPath: ventPlan.airflowPath,
+          roomGlobalIds: [room?.ifc_global_id].filter(Boolean),
           doorIds: ventPlan.doorIds,
-          roomGlobalIds: ventPlan.roomGids,
-          forceDoors: ventPlan.crossRoom,
+          doorCentroids: ventPlan.doorCentroids,
         })
       } else if (highlight && onHighlight) {
         onHighlight(highlight.globalIds, highlight.hexColor, room?.ifc_global_id)
@@ -342,42 +340,50 @@ export default function RetrofitCard({ strategy, room, allRooms = [], roofIds = 
             </div>
           )}
 
-          {/* Category C: paired-window legend */}
-          {cat === 'C' && ventGroups.length > 0 && (
+          {/* Category C: diagnosis-driven ventilation legend, sourced
+              directly from the backend's cross_ventilation.py analysis. */}
+          {cat === 'C' && ventPlan && (
             <div className="rc-vent-legend">
-              {ventGroups.length >= 2 ? (
+              <p className="rc-vent-title">
+                {ventPlan.classificationLabel}
+                <span className="rc-vent-confidence"> · {Math.round(ventPlan.confidence * 100)}% confidence</span>
+              </p>
+              {ventGroups.length > 0 && (
                 <>
-                  <p className="rc-vent-title">
-                    Open windows of these façades <strong>at the same time</strong>:
-                  </p>
+                  <p className="rc-vent-sub">Exterior openings involved:</p>
                   {ventGroups.map((g, i) => (
-                    <span key={g.orientation} className="rc-vent-item">
+                    <span key={g.globalIds[0]} className="rc-vent-item">
                       <span className="rc-vent-dot" style={{ background: g.hexColor }} />
-                      {g.orientation} façade ({g.globalIds.length} window{g.globalIds.length > 1 ? 's' : ''})
-                      {windDeg != null && (i === 0 ? ' — inlet (faces wind)' : ' — outlet')}
+                      {g.orientation} facing opening
                     </span>
                   ))}
-                  {ventPlan?.crossRoom && (
-                    <p className="rc-vent-warn">
-                      The second façade belongs to <strong>{ventPlan.partnerName}</strong> —
-                      cross-ventilation works only with the connecting door kept open
-                      (path shown through the door in 3D).
-                    </p>
-                  )}
-                  {windDeg != null && (
-                    <p className="rc-vent-wind">
-                      Prevailing summer wind: from {degToCompass(windDeg)} ({Math.round(windDeg)}°)
-                    </p>
-                  )}
                 </>
-              ) : (
+              )}
+              {ventPlan.isIndirect && (
                 <p className="rc-vent-warn">
-                  Only one façade of this room has openings, and no door-connected
-                  neighbouring room offers a second façade. True cross-ventilation is
-                  not achievable here — the path shown runs to the nearest interior door.
+                  This room has no strong direct cross-ventilation of its own —
+                  the path shown runs through a connected room's door to reach
+                  an exterior opening with a meaningfully different orientation.
+                  It only works with that connecting door kept open.
+                </p>
+              )}
+              {ventPlan.recommendations.length > 0 && (
+                <ul className="rc-vent-recs">
+                  {ventPlan.recommendations.map((r, i) => <li key={i}>{r}</li>)}
+                </ul>
+              )}
+              {windDeg != null && (
+                <p className="rc-vent-wind">
+                  Prevailing summer wind: from {degToCompass(windDeg)} ({Math.round(windDeg)}°)
                 </p>
               )}
             </div>
+          )}
+          {cat === 'C' && !ventPlan && (
+            <p className="rc-vent-warn">
+              Cross-ventilation diagnosis unavailable for this room — IFC data
+              may be incomplete. No path is shown rather than guessing.
+            </p>
           )}
 
           {/* Category C: protocol schedule table */}
@@ -413,6 +419,27 @@ export default function RetrofitCard({ strategy, room, allRooms = [], roofIds = 
               shgcBefore={shgc}
               shgcAfter={meta.sectionType === 'glazing' ? 0.35 : undefined}
             />
+          )}
+
+          {/* AI photorealistic render — facade/interior strategies only.
+              Opens the full-screen render view (App.jsx owns the request
+              + history so back/forward works across strategies). */}
+          {RENDERABLE[strategy.strategy_id] && jobId && onOpenRender && (
+            <div className="rc-render">
+              <button
+                className="rc-render-btn"
+                onClick={() => onOpenRender({
+                  jobId,
+                  room,
+                  strategyId: strategy.strategy_id,
+                  strategyName: name,
+                  viewType: RENDERABLE[strategy.strategy_id],
+                  orientation: renderTargetOrientation(strategy.strategy_id, room),
+                })}
+              >
+                ✨ Render this strategy ({RENDERABLE[strategy.strategy_id]} photo)
+              </button>
+            </div>
           )}
 
           {strategy.justification && (

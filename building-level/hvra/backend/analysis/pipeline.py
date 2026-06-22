@@ -267,10 +267,25 @@ def run_pipeline(
     if wind_deg is None:
         wind_deg = 135.0
 
+    # Cross-ventilation diagnosis overlay — independent of the room scoring
+    # above, so a failure here must never break the rest of the pipeline.
+    try:
+        from .cross_ventilation import analyze_cross_ventilation
+        cross_vent_result = analyze_cross_ventilation(ifc_path)
+        import json as _json
+        cv_path = os.path.join(output_dir, "cross_ventilation.json")
+        with open(cv_path, "w", encoding="utf-8") as f:
+            _json.dump(cross_vent_result, f, indent=2, ensure_ascii=False)
+    except Exception as exc:
+        logger.exception("Cross-ventilation analysis failed — continuing without it")
+        cross_vent_result = {"spaces": []}
+        warnings.append(f"Cross-ventilation diagnosis failed: {exc}")
+
     return {
         "rooms": room_jsons,
         "roof_element_ids": roof_element_ids,
         "prevailing_wind_deg": wind_deg,
+        "cross_ventilation": cross_vent_result,
         "files": {
             "room_problems": rp_path,
             "priority": pr_path,

@@ -13,3 +13,8 @@ osmnx>=1.9.3,<2.0
 # Stage 3 + 4b — LLM diagnosis and shortlist
 anthropic>=0.25.0
 python-dotenv>=1.0.0
+
+# Stage 5b — AI retrofit rendering (Street View fetch + Gemini image edit)
+httpx>=0.27.0
+google-genai>=0.3.0
+Pillow>=10.0.0

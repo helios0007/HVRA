@@ -78,8 +78,10 @@ const Viewer3D = forwardRef(function Viewer3D({ jobId, rooms, onRoomSelect, befo
      * Highlight several element groups, each with its own color.
      * @param {Array<{globalIds: string[], hexColor: string}>} groups
      * @param {boolean} reset
-     * @param {{drawFlow?: boolean}} [opts]  drawFlow: draw wind-path arrows
-     *        between the groups (cross-ventilation visualisation)
+     * @param {{airflowPath?: number[][]}} [opts]  airflowPath: backend-computed
+     *        polyline of [x,y,z] points (cross_ventilation.py's airflow_path) —
+     *        drawn exactly as given, since the backend already guarantees it
+     *        only passes through real opening/room/door centroids.
      */
     highlightGroups(groups, reset = true, opts = {}) {
       const model = modelRef.current
@@ -105,9 +107,87 @@ const Viewer3D = forwardRef(function Viewer3D({ jobId, rooms, onRoomSelect, befo
 
       for (const g of filtered) paintElements(model, originalsRef.current, g.globalIds, g.hexColor)
 
-      if (opts.drawFlow && sceneRef.current) {
-        const flow = buildFlowPaths(model, filtered, opts.doorIds ?? [], opts.forceDoors)
-        if (flow) {
+      if (opts.airflowPath?.length >= 2 && sceneRef.current) {
+        const flow = new THREE.Group()
+        const toScene = (p) => new THREE.Vector3(p[0], p[2], -p[1])
+        const raw = opts.airflowPath.map(toScene)
+
+        // The backend reports raw IFC world coordinates, but the loaded
+        // fragments model can carry its own internal offset (e.g. the
+        // loader centers huge IFC coordinates near the scene origin for
+        // float precision) — drawing raw coordinates directly produced an
+        // arrow floating far outside the building. Calibrate using a real
+        // IFC element we have BOTH a GlobalId and its EXACT raw centroid
+        // for (not "nearest path point" — that guess breaks down whenever
+        // the offset is large relative to the path's own span, which is
+        // exactly what happened on long multi-hop indirect paths): compare
+        // the element's true rendered position (elementBox, transform-
+        // aware) against its own known raw centroid, and shift the whole
+        // path by that exact difference. Prefer a highlighted opening; an
+        // indirect-path room can have zero of those, so fall back to a
+        // connecting door (also has an exact raw centroid); if neither is
+        // available, fall back to the model/path bounding-box centers —
+        // coarser, but keeps the arrow anchored near the building instead
+        // of floating off in raw-coordinate space.
+        // Try, in order of precision: the room's own exterior opening
+        // (exact GlobalId + exact raw centroid) → a connecting door (same
+        // exactness) → the room volume itself (less precise than a single
+        // opening, but still anchors to the correct ROOM rather than the
+        // whole building) → finally the whole-model bbox as a last resort.
+        let offset = null
+        let calibrationSource = 'none'
+
+        const refGroup = groups.find(g => g.globalIds?.length && g.refCentroid && elementBox(model, g.globalIds[0]))
+        if (refGroup) {
+          const refBox = elementBox(model, refGroup.globalIds[0])
+          offset = refBox.getCenter(new THREE.Vector3()).sub(toScene(refGroup.refCentroid))
+          calibrationSource = 'opening'
+        }
+
+        if (!offset) {
+          const refDoor = opts.doorCentroids?.find(d => elementBox(model, d.id))
+          if (refDoor) {
+            const refBox = elementBox(model, refDoor.id)
+            offset = refBox.getCenter(new THREE.Vector3()).sub(toScene(refDoor.centroid))
+            calibrationSource = 'door'
+          }
+        }
+
+        if (!offset) {
+          const roomGid = Array.isArray(roomGids) ? roomGids[0] : roomGids
+          const roomBox = roomGid ? elementBox(model, roomGid) : null
+          if (roomBox) {
+            const roomCenter = roomBox.getCenter(new THREE.Vector3())
+            const pathCenter = new THREE.Box3().setFromPoints(raw).getCenter(new THREE.Vector3())
+            offset = roomCenter.clone().sub(pathCenter)
+            calibrationSource = 'room-bbox'
+          }
+        }
+
+        if (!offset && bboxRef.current) {
+          const modelCenter = bboxRef.current.getCenter(new THREE.Vector3())
+          const pathCenter = new THREE.Box3().setFromPoints(raw).getCenter(new THREE.Vector3())
+          offset = modelCenter.clone().sub(pathCenter)
+          calibrationSource = 'model-bbox'
+        }
+
+        if (calibrationSource !== 'opening') {
+          console.warn(`[Viewer3D] airflow path calibrated via fallback (${calibrationSource}) — ` +
+                       'the room\'s own exterior opening GlobalId was not resolvable in the loaded model.')
+        }
+
+        const calibrated = offset ? raw.map(p => p.clone().add(offset)) : raw
+
+        // Flatten to one horizontal plane (a single floor's height) so the
+        // arrow reads as a clean top-down "wind enters here, exits there"
+        // diagram rather than a diagonal line climbing between window-sill
+        // and door-handle heights. Use the mean Y of the calibrated points
+        // as that plane, nudged up slightly so it doesn't z-fight the floor.
+        const meanY = calibrated.reduce((s, p) => s + p.y, 0) / calibrated.length
+        const points = calibrated.map(p => new THREE.Vector3(p.x, meanY + 0.05, p.z))
+
+        addFlowPath(flow, points)
+        if (flow.children.length) {
           sceneRef.current.add(flow)
           flowRef.current = flow
         }
@@ -148,6 +228,20 @@ const Viewer3D = forwardRef(function Viewer3D({ jobId, rooms, onRoomSelect, befo
         setSpaceVisibilityByIds(model, [inspectedRoomRef.current], false)
       }
       inspectedRoomRef.current = null
+    },
+
+    /**
+     * Capture the current 3D view as a JPEG Blob — used as the AI-render
+     * fallback source image when Street View has no coverage for the
+     * building's address.
+     * @returns {Promise<Blob|null>}
+     */
+    captureScreenshot() {
+      const renderer = rendererRef.current
+      if (!renderer?.domElement) return Promise.resolve(null)
+      return new Promise(resolve => {
+        renderer.domElement.toBlob(blob => resolve(blob), 'image/jpeg', 0.92)
+      })
     },
   }))
 
@@ -470,80 +564,16 @@ function elementBox(model, gid) {
 }
 
 /**
- * Build floor-level ventilation paths.
+ * Draw one flat polyline path with an arrowhead at the end.
  *
- * The path lies flat just above the floor plane: it starts under the first
- * window group, runs horizontally, and ends under the second. If a door
- * lies near the straight route, the path detours through it (air crossing
- * rooms must pass through openings).
- *
- * With only ONE window group, the path runs window → nearest door instead —
- * the air can only continue through the apartment.
+ * Uses straight segments through each waypoint (CatmullRomCurve3 was tried
+ * here previously, but its un-clamped spline tangents overshoot far past
+ * the waypoint bounds whenever the path has a sharp turn — e.g. an indirect
+ * cross-ventilation path that doubles back through a connecting door. Since
+ * these waypoints are a discrete sequence of real opening/room centroids,
+ * not a smooth physical trajectory, straight segments are both more
+ * correct and immune to that overshoot.
  */
-function buildFlowPaths(model, groups, doorIds, forceDoors = false) {
-  const groupBoxes = groups
-    .map(g => ({ box: groupBoxOf(model, g.globalIds) }))
-    .filter(g => g.box)
-  if (!groupBoxes.length) return null
-
-  const doorBoxes = doorIds
-    .map(gid => elementBox(model, gid))
-    .filter(Boolean)
-
-  // Floor level: doors stand on the floor — most reliable reference.
-  // Fallback: window sill minus typical sill height.
-  const floorY = doorBoxes.length
-    ? Math.min(...doorBoxes.map(b => b.min.y)) + 0.05
-    : Math.min(...groupBoxes.map(g => g.box.min.y)) - 0.85
-
-  const flat = (box) => {
-    const c = box.getCenter(new THREE.Vector3())
-    c.y = floorY
-    return c
-  }
-
-  const starts = groupBoxes.map(g => flat(g.box))
-  const doors = doorBoxes.map(b => flat(b))
-
-  const flow = new THREE.Group()
-
-  if (starts.length >= 2) {
-    // Window → (door if it lies near the route) → window, flat on the floor
-    for (let i = 1; i < starts.length; i++) {
-      const a = starts[0]
-      const b = starts[i]
-      const waypoints = [a]
-      for (const d of doors) {
-        // forceDoors: the path crosses rooms — it MUST pass the connecting
-        // door(s) regardless of how far they sit from the straight line
-        if (forceDoors || distToSegment2D(d, a, b) < 2.0) waypoints.push(d)
-      }
-      waypoints.sort((p, q) => p.distanceTo(a) - q.distanceTo(a))
-      waypoints.push(b)
-      addFlowPath(flow, waypoints)
-    }
-  } else if (doors.length) {
-    // Single façade: show the continuation path through the nearest door
-    const a = starts[0]
-    const nearest = doors.reduce((best, d) =>
-      d.distanceTo(a) < best.distanceTo(a) ? d : best
-    )
-    addFlowPath(flow, [a, nearest])
-  }
-
-  return flow.children.length ? flow : null
-}
-
-function distToSegment2D(p, a, b) {
-  const abx = b.x - a.x, abz = b.z - a.z
-  const len2 = abx * abx + abz * abz
-  if (len2 < 1e-9) return Math.hypot(p.x - a.x, p.z - a.z)
-  let t = ((p.x - a.x) * abx + (p.z - a.z) * abz) / len2
-  t = Math.max(0, Math.min(1, t))
-  return Math.hypot(p.x - (a.x + t * abx), p.z - (a.z + t * abz))
-}
-
-/** Draw one flat polyline path with an arrowhead at the end. */
 function addFlowPath(group, points) {
   if (points.length < 2) return
   const total = points.reduce(
@@ -551,34 +581,28 @@ function addFlowPath(group, points) {
   )
   if (total < 1e-3) return
 
-  const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.1)
   const radius = Math.min(Math.max(total * 0.012, 0.03), 0.1)
   const mat = new THREE.MeshBasicMaterial({
     color: 0x2e86de, transparent: true, opacity: 0.9, depthTest: false,
   })
 
-  const tube = new THREE.Mesh(
-    new THREE.TubeGeometry(curve, Math.max(24, points.length * 12), radius, 8), mat
-  )
-  tube.renderOrder = 999
-  group.add(tube)
+  // One TubeGeometry segment per leg (instead of one spline through all
+  // points) so each leg stays a straight line between its two waypoints.
+  for (let i = 1; i < points.length; i++) {
+    const legCurve = new THREE.LineCurve3(points[i - 1], points[i])
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(legCurve, 2, radius, 8), mat)
+    tube.renderOrder = 999
+    group.add(tube)
+  }
 
-  const dir = curve.getTangent(1).normalize()
+  const dir = points[points.length - 1].clone()
+    .sub(points[points.length - 2])
+    .normalize()
   const cone = new THREE.Mesh(new THREE.ConeGeometry(radius * 3, radius * 9, 12), mat)
   cone.position.copy(points[points.length - 1])
   cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
   cone.renderOrder = 999
   group.add(cone)
-}
-
-function groupBoxOf(model, globalIds) {
-  const box = new THREE.Box3()
-  let found = false
-  for (const gid of globalIds) {
-    const b = elementBox(model, gid)
-    if (b) { box.union(b); found = true }
-  }
-  return found ? box : null
 }
 
 // ── Original-appearance store ─────────────────────────────────────────────────
