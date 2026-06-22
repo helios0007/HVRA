@@ -20,6 +20,8 @@ import { urbanGroundingContext } from '../utils/urbanGrounding';
 import Viewer3D from './building/Viewer3D';
 import RoomPanel from './building/RoomPanel';
 import PortfolioView from './building/PortfolioView';
+import ComfortIndicator from './building/ComfortIndicator';
+import RenderView from './building/RenderView';
 import ErrorBoundary from './building/ErrorBoundary';
 import '../styles/BuildingAnalysisTab.css';
 import '../styles/buildingViewer.css';
@@ -86,6 +88,15 @@ export default function BuildingAnalysisTab({ selectedBuilding, urbanAnalysis })
   const [beforeAfter, setBeforeAfter] = useState('before');
   const viewerRef = useRef(null);
 
+  // AI-render flow (mirrors her App.jsx). Before/after is gated on hasRender so
+  // an 'after' view never appears before a render actually exists.
+  const [hasRender, setHasRender] = useState(false);
+  const [renderHistory, setRenderHistory] = useState([]);
+  const [renderIndex, setRenderIndex] = useState(-1);
+  const [renderOpen, setRenderOpen] = useState(false);
+  const [renderedRoomIds, setRenderedRoomIds] = useState(() => new Set());
+  const effectiveBeforeAfter = hasRender ? beforeAfter : 'before';
+
   // Pre-fill location + era from the selected urban building (grounding).
   useEffect(() => {
     if (!selectedBuilding) return;
@@ -112,6 +123,33 @@ export default function BuildingAnalysisTab({ selectedBuilding, urbanAnalysis })
   const handleInspectRoomToggle = useCallback((roomGlobalId, on, riskLevel) => {
     if (on) viewerRef.current?.highlightInspectedRoom(roomGlobalId, riskLevel);
     else viewerRef.current?.clearInspectedRoomHighlight();
+  }, []);
+
+  // ── AI render bridge (RetrofitCard → RenderView, Street-View fallback via
+  // a 3D viewport screenshot). Mirrors her App.jsx render handlers. ──────────
+  const handleCaptureScreenshot = useCallback(
+    () => viewerRef.current?.captureScreenshot() ?? Promise.resolve(null), []);
+  const handleOpenRender = useCallback((req) => {
+    const initialStatus = req.viewType === 'exterior' ? 'framing' : 'idle';
+    setRenderHistory((prev) => {
+      const next = [...prev, { ...req, status: initialStatus, imageUrl: null, error: null }];
+      setRenderIndex(next.length - 1);
+      return next;
+    });
+    setRenderOpen(true);
+  }, []);
+  const handleRenderNavigate = useCallback((i) => setRenderIndex(i), []);
+  const handleRenderClose = useCallback(() => setRenderOpen(false), []);
+  const handleRenderResolve = useCallback((i, patch) => {
+    setRenderHistory((prev) => {
+      const next = prev.map((h, idx) => (idx === i ? { ...h, ...patch } : h));
+      if (patch.status === 'done') {
+        const roomId = next[i]?.room?.room_id;
+        if (roomId) setRenderedRoomIds((s) => new Set(s).add(roomId));
+      }
+      return next;
+    });
+    if (patch.status === 'done') setHasRender(true);
   }, []);
 
   const setField = (e) => setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
@@ -151,6 +189,8 @@ export default function BuildingAnalysisTab({ selectedBuilding, urbanAnalysis })
       setSelectedRoom(null);
       setViewerTab('portfolio');
       setBeforeAfter('before');
+      setHasRender(false); setRenderHistory([]); setRenderIndex(-1);
+      setRenderOpen(false); setRenderedRoomIds(new Set());
       setState('done');
     } catch (err) {
       setErrorMsg(err.message || 'Could not reach the building-level backend (is it running on :8001?).');
@@ -161,6 +201,8 @@ export default function BuildingAnalysisTab({ selectedBuilding, urbanAnalysis })
   const reset = () => {
     setResult(null); setSelectedRoom(null); setViewerTab('portfolio');
     setBeforeAfter('before'); setState('idle');
+    setHasRender(false); setRenderHistory([]); setRenderIndex(-1);
+    setRenderOpen(false); setRenderedRoomIds(new Set());
   };
 
   // ---------------- Results view (full native port) ----------------
@@ -178,45 +220,67 @@ export default function BuildingAnalysisTab({ selectedBuilding, urbanAnalysis })
             </p>
           </div>
           <div className="ba-viewer-actions">
-            <div className="ba-ba-toggle">
-              <button className={beforeAfter === 'before' ? 'active' : ''} onClick={() => setBeforeAfter('before')}>Before</button>
-              <button className={beforeAfter === 'after' ? 'active' : ''} onClick={() => setBeforeAfter('after')}>After retrofit</button>
-            </div>
+            {hasRender ? (
+              <div className="ba-ba-toggle">
+                <button className={effectiveBeforeAfter === 'before' ? 'active' : ''} onClick={() => setBeforeAfter('before')}>Before</button>
+                <button className={effectiveBeforeAfter === 'after' ? 'active' : ''} onClick={() => setBeforeAfter('after')}>After retrofit</button>
+              </div>
+            ) : (
+              <span className="ba-render-hint" title="Open a room → expand a shading/window strategy card → Render">
+                Render a strategy to unlock before / after
+              </span>
+            )}
             <button className="btn-secondary" onClick={reset}>New assessment</button>
           </div>
         </div>
 
         <div className="ba-viewer-body">
           <aside className="ba-viewer-sidebar">
-            <div className="ba-viewer-tabs">
-              <button className={viewerTab === 'portfolio' ? 'active' : ''} onClick={() => setViewerTab('portfolio')}>
-                All rooms ({result.rooms.length})
-              </button>
-              <button className={viewerTab === 'room' ? 'active' : ''} onClick={() => setViewerTab('room')} disabled={!selectedRoom}>
-                Room detail
-              </button>
-            </div>
-            <div className="ba-viewer-sidecontent">
-              {viewerTab === 'portfolio' && (
-                <PortfolioView rooms={result.rooms} selectedRoom={selectedRoom} onSelectRoom={handleRoomSelect} />
-              )}
-              {viewerTab === 'room' && selectedRoom && (
-                <RoomPanel
-                  room={selectedRoom}
-                  allRooms={result.rooms}
-                  beforeAfter={beforeAfter}
-                  roofIds={result.roof_element_ids ?? []}
-                  windDeg={result.prevailing_wind_deg}
-                  onInspectRoomToggle={handleInspectRoomToggle}
-                  onStrategyHighlight={handleStrategyHighlight}
-                  onStrategyHighlightGroups={handleStrategyHighlightGroups}
-                  onHighlightClear={handleHighlightClear}
-                />
-              )}
-              {viewerTab === 'room' && !selectedRoom && (
-                <p className="ba-hint">Click a room in the 3D viewer or the list to see its detail.</p>
-              )}
-            </div>
+            {renderOpen && renderHistory.length > 0 ? (
+              <RenderView
+                history={renderHistory}
+                index={renderIndex}
+                onNavigate={handleRenderNavigate}
+                onClose={handleRenderClose}
+                onResolve={handleRenderResolve}
+                onCaptureScreenshot={handleCaptureScreenshot}
+              />
+            ) : (
+              <>
+                <div className="ba-viewer-tabs">
+                  <button className={viewerTab === 'portfolio' ? 'active' : ''} onClick={() => setViewerTab('portfolio')}>
+                    All rooms ({result.rooms.length})
+                  </button>
+                  <button className={viewerTab === 'room' ? 'active' : ''} onClick={() => setViewerTab('room')} disabled={!selectedRoom}>
+                    Room detail
+                  </button>
+                </div>
+                <div className="ba-viewer-sidecontent">
+                  {viewerTab === 'portfolio' && (
+                    <PortfolioView rooms={result.rooms} selectedRoom={selectedRoom} onSelectRoom={handleRoomSelect} />
+                  )}
+                  {viewerTab === 'room' && selectedRoom && (
+                    <RoomPanel
+                      room={selectedRoom}
+                      allRooms={result.rooms}
+                      beforeAfter={effectiveBeforeAfter}
+                      roofIds={result.roof_element_ids ?? []}
+                      windDeg={result.prevailing_wind_deg}
+                      crossVentSpaces={result.cross_ventilation?.spaces ?? []}
+                      jobId={result.job_id}
+                      onInspectRoomToggle={handleInspectRoomToggle}
+                      onStrategyHighlight={handleStrategyHighlight}
+                      onStrategyHighlightGroups={handleStrategyHighlightGroups}
+                      onHighlightClear={handleHighlightClear}
+                      onOpenRender={handleOpenRender}
+                    />
+                  )}
+                  {viewerTab === 'room' && !selectedRoom && (
+                    <p className="ba-hint">Click a room in the 3D viewer or the list to see its detail.</p>
+                  )}
+                </div>
+              </>
+            )}
           </aside>
 
           <main className="ba-viewer-main">
@@ -228,7 +292,7 @@ export default function BuildingAnalysisTab({ selectedBuilding, urbanAnalysis })
                 rooms={result.rooms}
                 selectedRoom={selectedRoom}
                 onRoomSelect={handleRoomSelect}
-                beforeAfter={beforeAfter}
+                beforeAfter={effectiveBeforeAfter}
               />
             </ErrorBoundary>
             <div className="ba-viewer-legend">
@@ -237,6 +301,13 @@ export default function BuildingAnalysisTab({ selectedBuilding, urbanAnalysis })
               <span className="leg moderate">Moderate</span>
               <span className="leg safe">Safe</span>
             </div>
+            {/* Human comfort/vulnerability ring — building-wide, or the selected
+                room's own risk; flips to "improved" once that room is rendered. */}
+            <ComfortIndicator
+              rooms={result.rooms}
+              selectedRoom={selectedRoom}
+              roomRendered={selectedRoom ? renderedRoomIds.has(selectedRoom.room_id) : false}
+            />
           </main>
         </div>
       </div>

@@ -155,6 +155,87 @@
   white-space: nowrap;
 }
 
+/* ── AI render panel ── */
+.rc-render {
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+}
+
+.rc-render-btn {
+  width: 100%;
+  background: linear-gradient(90deg, #6a5acd, #8e6ad6);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.rc-render-btn:hover {
+  filter: brightness(1.08);
+}
+
+.rc-render-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  padding: 0.4rem 0;
+}
+
+.rc-render-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(106, 90, 205, 0.25);
+  border-top-color: #6a5acd;
+  border-radius: 50%;
+  animation: rc-render-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes rc-render-spin {
+  to { transform: rotate(360deg); }
+}
+
+.rc-render-error {
+  background: var(--error-bg, #fef0ef);
+  border: 1px solid var(--error-border, #f5c6c3);
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem;
+}
+
+.rc-render-error p {
+  font-size: 0.76rem;
+  color: var(--error-text, #8b1a1a);
+  margin-bottom: 0.4rem;
+}
+
+.rc-render-retry {
+  background: none;
+  border: 1px solid var(--error-text, #8b1a1a);
+  color: var(--error-text, #8b1a1a);
+  font-size: 0.72rem;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.rc-render-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rc-render-img {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
 .rc-header-right {
   display: flex;
   align-items: center;
@@ -215,7 +296,28 @@
   font-size: 0.74rem;
   color: #0e6655;
   margin: 0 0 2px 0;
+  font-weight: 600;
 }
+
+.rc-vent-confidence {
+  font-weight: 400;
+  color: #5a8c80;
+}
+
+.rc-vent-sub {
+  font-size: 0.7rem;
+  color: #5a8c80;
+  margin: 4px 0 2px 0;
+}
+
+.rc-vent-recs {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  font-size: 0.72rem;
+  color: #444;
+  line-height: 1.5;
+}
+.rc-vent-recs li { margin-bottom: 2px; }
 
 .rc-vent-item {
   display: flex;

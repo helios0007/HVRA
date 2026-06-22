@@ -25,6 +25,7 @@ try:
     import ifcopenshell
     import ifcopenshell.util.placement
     import ifcopenshell.util.element
+    import ifcopenshell.util.unit  # [urban-fix] length-unit scale for geometry fallback
     import ifcopenshell.geom
     _IFC_AVAILABLE = True
     _geom_settings = ifcopenshell.geom.settings()
@@ -111,6 +112,13 @@ def parse_ifc(ifc_path: str, construction_year: str) -> list[RoomData]:
         )
 
     ifc = ifcopenshell.open(ifc_path)
+
+    # [urban-fix] length-unit scale (file units → metres) for the geometry-based
+    # wall-area fallback below. 1.0 for metre files; 0.001 for millimetre files.
+    try:
+        _unit_scale = ifcopenshell.util.unit.calculate_unit_scale(ifc)
+    except Exception:
+        _unit_scale = 1.0
 
     # ── 1. Build storey index (sorted by elevation) ─────────────────────────
     storeys = sorted(
@@ -359,7 +367,7 @@ def parse_ifc(ifc_path: str, construction_year: str) -> list[RoomData]:
                     wall.GlobalId, orientation, wall_origins, plan_bounds
                 ):
                     continue
-            wall_area = _wall_area(wall)
+            wall_area = _wall_area(wall, _unit_scale)  # [urban-fix] pass unit scale
             if wall_area <= 0.0:
                 continue  # cannot use zero-area walls
 
@@ -497,8 +505,16 @@ def _wall_orientation(wall, origin=None, centroid=None) -> float:
         return 180.0  # default South if matrix unavailable
 
 
-def _wall_area(wall) -> float:
-    """Try IfcQuantityArea (Net > Gross) then fall back to 0."""
+def _wall_area(wall, unit_scale: float = 1.0) -> float:
+    """Try IfcQuantityArea (Net > Gross); fall back to wall geometry.
+
+    [urban-fix] Many IFC exports (e.g. the buildingSMART Duplex model, most
+    Revit/ArchiCAD outputs without base quantities) carry NO IfcElementQuantity,
+    so the quantity path returned 0.0 and every façade was dropped downstream
+    (caller: `if wall_area <= 0: continue`). When no quantity exists, estimate
+    the façade area from the wall's bounding box: largest horizontal extent ×
+    height, converted to m² via the file's length-unit scale.
+    """
     for rel in getattr(wall, "IsDefinedBy", []) or []:
         if not rel.is_a("IfcRelDefinesByProperties"):
             continue
@@ -517,6 +533,22 @@ def _wall_area(wall) -> float:
         val = net if net is not None else gross
         if val is not None and val > 0:
             return val
+
+    # [urban-fix] geometry fallback — façade area ≈ horizontal extent × height.
+    if _geom_settings is not None:
+        try:
+            shape = ifcopenshell.geom.create_shape(_geom_settings, wall)
+            v = shape.geometry.verts  # flat [x,y,z, x,y,z, ...] in file units
+            xs = v[0::3]
+            ys = v[1::3]
+            zs = v[2::3]
+            length = max(max(xs) - min(xs), max(ys) - min(ys))
+            height = max(zs) - min(zs)
+            area = length * height * (unit_scale ** 2)
+            if 0.0 < area < 100000.0:  # sanity clamp
+                return round(area, 2)
+        except Exception:
+            pass
     return 0.0
 
 

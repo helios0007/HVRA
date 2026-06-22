@@ -12,7 +12,19 @@ const RISK_CLASS = {
   Safe:     'badge--safe',
 }
 
-export default function RoomPanel({ room, allRooms, beforeAfter, roofIds, windDeg, onInspectRoomToggle, onStrategyHighlight, onStrategyHighlightGroups, onHighlightClear }) {
+// [cross-vent] human labels for the cross-ventilation classifier (Gaelle's
+// analysis/cross_ventilation.py) — keep in sync with her classification keys.
+const CROSS_VENT_LABEL = {
+  strong_cross_ventilation:   'Strong cross-ventilation',
+  moderate_cross_ventilation: 'Moderate cross-ventilation',
+  weak_adjacent_ventilation:  'Weak adjacent ventilation',
+  single_sided:               'Single-sided only',
+  indirect_possible:          'Indirect (via connected room)',
+  poor:                       'Poor / none',
+  unknown:                    'Unknown',
+}
+
+export default function RoomPanel({ room, allRooms, beforeAfter, roofIds, windDeg, crossVentSpaces = [], jobId, onInspectRoomToggle, onStrategyHighlight, onStrategyHighlightGroups, onHighlightClear, onOpenRender }) {
   const ts      = room.thermal_scores ?? {}
   const vent    = room.ventilation    ?? {}
   const env     = room.envelope       ?? {}
@@ -21,6 +33,9 @@ export default function RoomPanel({ room, allRooms, beforeAfter, roofIds, windDe
   const shortlist = ai.shortlist      ?? []
 
   const primaryOrientation = room.facades?.[0]?.orientation ?? '—'
+
+  // [cross-vent] this room's ventilation diagnosis, matched by IfcSpace id.
+  const cv = crossVentSpaces.find((s) => s.space_id === room.ifc_global_id) ?? null
 
   // Room-inspect highlight toggle — resets to off whenever the inspected
   // room changes, and clears the 3D highlight on unmount/room switch so it
@@ -110,12 +125,20 @@ export default function RoomPanel({ room, allRooms, beforeAfter, roofIds, windDe
       <div className="rp-section">
         <h3 className="rp-section-title">Ventilation</h3>
         <div className="score-grid">
-          <BoolRow label="Cross-ventilation" pass={!!vent.cross_ventilation_direct}
-                   passLabel="Direct" failLabel="None" />
-          <BoolRow label="Secondary path"    pass={!!vent.secondary_path_possible}
-                   passLabel="Yes" failLabel="No" />
+          <InfoRow label="Cross-ventilation"
+                   value={cv ? CROSS_VENT_LABEL[cv.classification] ?? cv.classification : '—'} />
+          <InfoRow label="Confidence"
+                   value={cv ? `${Math.round((cv.confidence ?? 0) * 100)}%` : '—'} />
           <InfoRow label="Exterior facades"  value={vent.exterior_facades ?? 0} />
         </div>
+        {cv?.recommendations?.length > 0 && (
+          <ul className="rp-vent-recs">
+            {cv.recommendations.map((r, i) => <li key={i}>{r}</li>)}
+          </ul>
+        )}
+        {cv?.assumptions?.length > 0 && (
+          <p className="rp-vent-assumptions">{cv.assumptions.join(' ')}</p>
+        )}
       </div>
 
       {/* ── Envelope ── */}
@@ -152,9 +175,12 @@ export default function RoomPanel({ room, allRooms, beforeAfter, roofIds, windDe
               allRooms={allRooms}
               roofIds={roofIds}
               windDeg={windDeg}
+              crossVent={cv}
+              jobId={jobId}
               onHighlight={onStrategyHighlight}
               onHighlightGroups={onStrategyHighlightGroups}
               onHighlightClear={onHighlightClear}
+              onOpenRender={onOpenRender}
             />
           ))
         )}

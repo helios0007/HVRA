@@ -1,9 +1,12 @@
 /**
- * WallSection — before/after wall section diagrams for Category B strategies.
+ * WallSection — before/after section diagrams for Category B strategies.
  *
- * Style: architectural section — vertical layer strips (exterior → interior,
- * left → right), labels stacked on the left with leader lines pointing to
- * each layer, like a typical wall assembly detail.
+ * Wall/window strategies: vertical layer strips (exterior → interior,
+ * left → right), like a plan-view wall assembly detail.
+ *
+ * Roof strategies (roof_insulation, roof_coating): horizontal stacked
+ * layers (sky above → interior below), like a vertical section through a
+ * roof slab — so the diagram reads as a horizontal element, not a wall.
  *
  * Props:
  *   layers        {Array<{name, thickness_mm}>}  existing wall layers exterior→interior
@@ -52,6 +55,10 @@ const ANNOTATIONS = {
   glazing:         'Glass replaced with solar-control low-e unit',
   blinds:          'Roller blind installed at window head',
 }
+
+// Roof strategies are drawn as a horizontal slab (top-to-bottom layers,
+// sky above) instead of the default vertical wall-strip layout.
+const ROOF_TYPES = new Set(['roof_insulation', 'roof_coating'])
 
 // ── Fill style per material ────────────────────────────────────────────────
 function fillFor(name, idPrefix) {
@@ -176,6 +183,96 @@ function SectionDiagram({ title, layers, uValue, uColor, idPrefix, shgc }) {
   )
 }
 
+// ── Roof geometry constants (horizontal slab, sky above) ────────────────────
+const ROOF_SVG_W = 290
+const ROOF_SVG_H = 200
+const ROOF_X = 36
+const ROOF_MAX_W = 220   // horizontal span of the slab drawing
+const ROOF_LAYERS_Y = 70 // where the stacked layer band starts (below sky)
+const ROOF_MAX_H = 64    // max height of the stacked layer band
+
+function RoofSectionDiagram({ title, layers, uValue, uColor, idPrefix }) {
+  const totalMm = layers.reduce((s, l) => s + l.thickness_mm, 0)
+  const scale = ROOF_MAX_H / Math.max(totalMm, 1)
+
+  // Layers stack top→bottom in the order given (exterior/sky-facing first),
+  // mirroring how _ERA_WALL_LAYERS/ADDED_LAYERS already order roof layers.
+  let y = ROOF_LAYERS_Y
+  const strips = layers.map(l => {
+    const h = Math.max(l.thickness_mm * scale, 4)
+    const s = { y, h, ...l }
+    y += h
+    return s
+  })
+  const stripsEnd = y
+  const slabRight = ROOF_X + ROOF_MAX_W
+
+  const n = strips.length
+  const labelXs = strips.map((_, i) =>
+    ROOF_X + 14 + (n > 1 ? i * ((ROOF_MAX_W - 28) / (n - 1)) : (ROOF_MAX_W - 28) / 2)
+  )
+
+  return (
+    <div className="ws-panel">
+      <p className="ws-label">{title}</p>
+      <svg width={ROOF_SVG_W} height={ROOF_SVG_H} viewBox={`0 0 ${ROOF_SVG_W} ${ROOF_SVG_H}`}>
+        <defs>
+          <pattern id={`${idPrefix}-insul`} width="8" height="8" patternUnits="userSpaceOnUse">
+            <rect width="8" height="8" fill="#f9efc7" />
+            <path d="M0 8 L4 0 L8 8" stroke="#c9a94e" strokeWidth="0.8" fill="none" />
+          </pattern>
+        </defs>
+
+        {/* Sky / sun above the roof */}
+        <circle cx={slabRight - 14} cy={22} r="9" fill="#fde68a" stroke="#f0b429" strokeWidth="0.8" />
+        <text x={ROOF_X} y={18} fontSize="7" fill="#999" fontStyle="italic">OUTSIDE (sky)</text>
+
+        {/* U-value annotation */}
+        {uValue != null && (
+          <text x={(ROOF_X + slabRight) / 2} y={44} textAnchor="middle"
+                fontSize="9" fontWeight="700" fill={uColor}>
+            U = {uValue.toFixed(2)} W/m²K
+          </text>
+        )}
+
+        {/* Stacked horizontal layers — the roof slab */}
+        {strips.map((s, i) => (
+          <rect key={i}
+            x={ROOF_X} y={s.y} width={ROOF_MAX_W} height={s.h}
+            fill={fillFor(s.name, idPrefix)}
+            stroke={s.added ? '#d97706' : '#777'}
+            strokeWidth={s.added ? 1.6 : 0.6}
+            strokeDasharray={s.added ? '4 2' : 'none'}
+          />
+        ))}
+
+        {/* Labels + leader lines, dropping down from each layer band */}
+        {strips.map((s, i) => {
+          const cy = s.y + s.h / 2
+          const lx = labelXs[i]
+          return (
+            <g key={i}>
+              <line x1={lx} y1={cy} x2={lx} y2={stripsEnd + 14 + i * 9}
+                    stroke={s.added ? '#d97706' : '#999'} strokeWidth="0.7" />
+              <circle cx={lx} cy={cy} r="1.4" fill={s.added ? '#d97706' : '#999'} />
+              <text x={lx} y={stripsEnd + 16 + i * 9} fontSize="6.5" textAnchor="middle"
+                    fontWeight={s.added ? 700 : 400}
+                    fill={s.added ? '#b45309' : '#444'}>
+                {s.name} ({Math.round(s.thickness_mm)}mm)
+              </text>
+            </g>
+          )
+        })}
+
+        {/* INSIDE label below the slab */}
+        <text x={ROOF_X} y={ROOF_SVG_H - 8} fontSize="7" fill="#999" fontStyle="italic">
+          INSIDE (room below)
+        </text>
+      </svg>
+    </div>
+  )
+}
+
 export default function WallSection({ layers = [], sectionType, uValueBefore, uValueAfter, shgcBefore, shgcAfter }) {
   const isGlazing = sectionType === 'glazing'
 
@@ -197,10 +294,12 @@ export default function WallSection({ layers = [], sectionType, uValueBefore, uV
     after = [...existing, ...added]
   }
 
+  const Diagram = ROOF_TYPES.has(sectionType) ? RoofSectionDiagram : SectionDiagram
+
   return (
     <div className="wall-section">
       <div className="ws-panels">
-        <SectionDiagram
+        <Diagram
           title="Before"
           layers={existing}
           uValue={uValueBefore}
@@ -209,7 +308,7 @@ export default function WallSection({ layers = [], sectionType, uValueBefore, uV
           shgc={isGlazing ? shgcBefore : null}
         />
         <div className="ws-arrow">→</div>
-        <SectionDiagram
+        <Diagram
           title="After"
           layers={after}
           uValue={uValueAfter}

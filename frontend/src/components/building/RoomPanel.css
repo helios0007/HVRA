@@ -172,3 +172,21 @@
   font-style: italic;
   line-height: 1.55;
 }
+
+/* ── Cross-ventilation recommendations (Gaelle's cross-vent diagnosis) ── */
+.rp-vent-recs {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.rp-vent-recs li { margin-bottom: 3px; }
+
+.rp-vent-assumptions {
+  margin: 6px 0 0;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.45;
+}
