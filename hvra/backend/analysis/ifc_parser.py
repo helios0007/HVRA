@@ -25,9 +25,13 @@ try:
     import ifcopenshell
     import ifcopenshell.util.placement
     import ifcopenshell.util.element
+    import ifcopenshell.geom
     _IFC_AVAILABLE = True
+    _geom_settings = ifcopenshell.geom.settings()
+    _geom_settings.set(_geom_settings.USE_WORLD_COORDS, True)
 except ImportError:
     _IFC_AVAILABLE = False
+    _geom_settings = None
 
 
 # ── U-value defaults by construction era ───────────────────────────────────────
@@ -128,6 +132,34 @@ def parse_ifc(ifc_path: str, construction_year: str) -> list[RoomData]:
                     host = void_rel.RelatingBuildingElement
                     wall_to_windows.setdefault(host.GlobalId, []).append(window)
 
+    # ── 2b. World-space XY centroids for windows + spaces ───────────────────
+    # A single long wall can bound several rooms (Revit "EXTERNAL" boundary
+    # flags are sometimes set for every room the wall geometrically touches,
+    # not just the room directly behind a given window). Without a position
+    # check, a window physically in room B gets attributed to room A too,
+    # because they share the same host wall. World-space centroids (full
+    # shape geometry, not the local placement matrix — IfcSpace placements
+    # are often relative/zeroed in Revit exports) let us require a window be
+    # near the room's own footprint before counting it as that room's.
+    def _world_centroid_xy(element) -> Optional[tuple[float, float]]:
+        try:
+            shape = ifcopenshell.geom.create_shape(_geom_settings, element)
+            verts = shape.geometry.verts
+            if not verts:
+                return None
+            xs = verts[0::3]
+            ys = verts[1::3]
+            return (sum(xs) / len(xs), sum(ys) / len(ys))
+        except Exception:
+            return None
+
+    window_xy: dict[str, Optional[tuple[float, float]]] = {
+        w.GlobalId: _world_centroid_xy(w) for w in ifc.by_type("IfcWindow")
+    }
+    space_xy: dict[str, Optional[tuple[float, float]]] = {
+        s.GlobalId: _world_centroid_xy(s) for s in ifc.by_type("IfcSpace")
+    }
+
     # ── 3. Map wall GlobalId → doors hosted on it ───────────────────────────
     walls_with_doors: set[str] = set()
     wall_to_doors: dict[str, list] = {}
@@ -200,6 +232,25 @@ def parse_ifc(ifc_path: str, construction_year: str) -> list[RoomData]:
         if z is None:
             return True  # no geometry info — keep rather than lose the opening
         return (elev - 0.5) <= z < (elev + height - 0.3)
+
+    def _near_room(
+        window_gid: str,
+        win_xy: Optional[tuple],
+        room_xy: Optional[tuple],
+        radius_m: float,
+    ) -> bool:
+        """
+        True if window_gid's world-space centroid lies within radius_m of
+        the room's centroid. Missing geometry on either side keeps the
+        window (fails open) rather than silently dropping real windows.
+        """
+        wxy = win_xy
+        if wxy is None or room_xy is None:
+            return True
+        dx = wxy[0] - room_xy[0]
+        dy = wxy[1] - room_xy[1]
+        return (dx * dx + dy * dy) ** 0.5 <= radius_m
+
     if wall_origins:
         xs = [p[0] for p in wall_origins.values()]
         ys = [p[1] for p in wall_origins.values()]
@@ -278,25 +329,53 @@ def parse_ifc(ifc_path: str, construction_year: str) -> list[RoomData]:
             wo = wall_origins.get(wall.GlobalId)
             # Heuristic mode: wall must belong to this room's storey — walls
             # of other floors share the same plan position and would donate
-            # their windows to the wrong room
+            # their windows to the wrong room. Skipped when EXTERNAL is
+            # explicit: full-height walls are often modelled once (at the
+            # ground-floor storey's Z) and legitimately serve every floor
+            # they pass through, so storey-Z is not a valid exterior/interior
+            # signal once the IFC has already told us this wall is external.
             if not boundaries_explicit and wo is not None and abs(wo[2] - floor_elev) > 1.8:
                 continue
             orientation = _wall_orientation(wall, wo, plan_centroid)
-            # Heuristic mode: wall must sit on the plan edge it faces
-            # (drops interior partitions misread as facades)
-            if not boundaries_explicit and not _on_matching_edge(
-                wall.GlobalId, orientation, wall_origins, plan_bounds
-            ):
-                continue
+            if boundaries_explicit:
+                # An explicit EXTERNAL flag is trustworthy in the vast
+                # majority of cases, but Revit/IFC exports sometimes
+                # mis-tag an interior partition wall as EXTERNAL. Catch
+                # that specific failure mode with a direction-agnostic
+                # perimeter check (near ANY plan edge) rather than the
+                # heuristic path's stricter "near the edge matching this
+                # wall's own orientation" check — the latter is too strict
+                # here because orientation can be ambiguous/noisy for
+                # walls that are valid but not axis-aligned with the
+                # simple plan bbox (e.g. walls near a corner), and
+                # wrongly rejecting a real facade is worse than missing
+                # the rare genuinely-interior mistagged wall.
+                if not _near_perimeter(wall.GlobalId, wall_origins, plan_bounds):
+                    continue
+            else:
+                # Heuristic mode: wall must sit on the plan edge it faces
+                # (drops interior partitions misread as facades)
+                if not _on_matching_edge(
+                    wall.GlobalId, orientation, wall_origins, plan_bounds
+                ):
+                    continue
             wall_area = _wall_area(wall)
             if wall_area <= 0.0:
                 continue  # cannot use zero-area walls
 
             # Only windows at this room's storey — full-height walls host
-            # openings of several floors
+            # openings of several floors. Also only windows actually near
+            # THIS room's footprint — a single wall can bound several rooms
+            # (Revit "EXTERNAL" boundary flags are sometimes set for every
+            # room a long wall geometrically touches), so without this a
+            # window physically inside a neighbouring room would be
+            # attributed here too just for sharing the same host wall.
+            room_xy = space_xy.get(gid)
+            room_radius = max((area_m2 ** 0.5) * 1.5, 4.0)  # generous: room "radius" + margin
             windows = [
                 w for w in wall_to_windows.get(wall.GlobalId, [])
                 if _on_storey(w.GlobalId, window_z, floor_elev, _storey_h)
+                and _near_room(w.GlobalId, window_xy.get(w.GlobalId), room_xy, room_radius)
             ]
             window_area = sum(_window_area(w) for w in windows)
             window_area = min(window_area, wall_area)
@@ -528,7 +607,7 @@ def _near_perimeter(
     """
     if not plan_bounds or gid not in wall_origins:
         return True
-    x, y = wall_origins[gid]
+    x, y = wall_origins[gid][0], wall_origins[gid][1]
     minx, miny, maxx, maxy = plan_bounds
     span = max(maxx - minx, maxy - miny)
     if span <= 0:
@@ -592,7 +671,7 @@ def _on_matching_edge(
     """
     if not plan_bounds or gid not in wall_origins:
         return True
-    x, y = wall_origins[gid]
+    x, y = wall_origins[gid][0], wall_origins[gid][1]
     minx, miny, maxx, maxy = plan_bounds
     span = max(maxx - minx, maxy - miny)
     if span <= 0:

@@ -126,6 +126,12 @@
   color: #fff;
 }
 
+.render-hint {
+  font-size: 0.74rem;
+  color: #999;
+  font-style: italic;
+}
+
 /* ── Upload view ── */
 .app-main {
   flex: 1;

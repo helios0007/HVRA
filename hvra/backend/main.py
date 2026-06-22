@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import json
 import logging
 import os
 import shutil
@@ -22,6 +24,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Render-Source"],
 )
 
 UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "uploads")
@@ -63,6 +66,12 @@ async def upload_building(
         shutil.copyfileobj(ifc_file.file, buf)
 
     logger.info("Job %s: saved IFC → %s", job_id, ifc_path)
+
+    # Persist building location — needed later by /jobs/{id}/render to fetch
+    # a Street View photo, since that endpoint is called independently of
+    # this upload request (after the user clicks "Render" on a strategy card).
+    with open(os.path.join(job_dir, "location.json"), "w", encoding="utf-8") as f:
+        json.dump({"lat": lat, "lon": lon}, f)
 
     # ── Coerce form string booleans ─────────────────────────────────────────
     heritage_bool = heritage_protection.lower() == "yes"
@@ -135,6 +144,7 @@ async def upload_building(
         "rooms": result["rooms"],
         "roof_element_ids": result.get("roof_element_ids", []),
         "prevailing_wind_deg": result.get("prevailing_wind_deg"),
+        "cross_ventilation": result.get("cross_ventilation", {"spaces": []}),
         "files": result.get("files", {}),
         "inputs": {
             "location": {"lat": lat, "lon": lon},
@@ -159,6 +169,18 @@ async def get_room_problems(job_id: str):
     path = os.path.join(UPLOADS_DIR, job_id, "room_problems.json")
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found or not yet complete.")
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+@app.get("/jobs/{job_id}/cross_ventilation")
+async def get_cross_ventilation(job_id: str):
+    """Return cross_ventilation.json — the per-room ventilation diagnosis
+    overlay (classification, exterior openings, airflow path, recommendations)."""
+    import json
+    path = os.path.join(UPLOADS_DIR, job_id, "cross_ventilation.json")
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail=f"Job {job_id} cross_ventilation data not found.")
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
@@ -247,9 +269,210 @@ async def get_ifc_after(job_id: str):
 @app.get("/strategy_library")
 async def get_strategy_library():
     """Return the static strategy library (all 19 strategies with full metadata)."""
-    import json
     path = os.path.join(os.path.dirname(__file__), "config", "strategy_library.json")
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Strategy library not found.")
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+# ── Stage 5b — AI retrofit rendering ────────────────────────────────────────────
+
+@app.get("/renderable_strategies")
+async def get_renderable_strategies():
+    """Strategy IDs eligible for AI rendering, and whether each needs an
+    exterior or interior source photo — drives whether the frontend shows
+    a 'Render' button on a given strategy card."""
+    from analysis.render import RENDERABLE_STRATEGIES
+    return {sid: {"view": v["view"]} for sid, v in RENDERABLE_STRATEGIES.items()}
+
+
+@app.get("/jobs/{job_id}/street_view_preview")
+async def street_view_preview(
+    job_id: str,
+    heading: float = 0.0,
+    pitch: int = 0,
+    fov: int = 80,
+):
+    """
+    Live (uncached, no AI call) Street View frame for the given camera
+    params — lets the user pan/tilt/zoom and see the result before
+    committing to a paid AI render. Returns 404 if there's no Street View
+    coverage at the building's location at all.
+    """
+    job_dir = os.path.join(UPLOADS_DIR, job_id)
+    loc_path = os.path.join(job_dir, "location.json")
+    if not os.path.exists(loc_path):
+        raise HTTPException(status_code=404, detail=f"Job {job_id} location not found.")
+    with open(loc_path, encoding="utf-8") as f:
+        loc = json.load(f)
+
+    from analysis.street_view import fetch_facade_photo
+    fov = max(20, min(120, fov))
+    pitch = max(-90, min(90, pitch))
+    image = await fetch_facade_photo(loc["lat"], loc["lon"], heading, fov=fov, pitch=pitch)
+    if image is None:
+        raise HTTPException(status_code=404, detail="No Street View coverage at this location.")
+
+    from fastapi.responses import Response
+    return Response(content=image, media_type="image/jpeg")
+
+
+@app.post("/jobs/{job_id}/render")
+async def render_retrofit(
+    job_id: str,
+    room_id: str = Form(...),
+    strategy_id: str = Form(...),
+    orientation: str = Form(""),
+    room_name: str = Form(""),
+    custom_prompt: str = Form(""),
+    heading: float | None = Form(None),
+    pitch: int = Form(0),
+    fov: int = Form(80),
+    fallback_screenshot: UploadFile | None = File(None),
+):
+    """
+    Generate (or return a cached) AI render showing strategy_id applied to
+    room_id's facade/interior. Tries Street View first (exterior strategies
+    only); falls back to fallback_screenshot (a viewport capture the
+    frontend sends) if Street View has no coverage or the strategy needs an
+    interior view.
+
+    custom_prompt : optional user styling instructions (e.g. "darker wood
+    tone, steeper angle") appended to the strategy's base prompt.
+
+    Renders are cached on disk per (room_id, strategy_id, custom_prompt) —
+    re-requesting the same combination returns the cached PNG instead of
+    calling the paid Gemini API again. A different custom_prompt produces
+    and caches a separate render rather than overwriting the default one.
+    """
+    from analysis.render import is_renderable, render_view_type, generate_retrofit_render
+
+    if not is_renderable(strategy_id):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Strategy '{strategy_id}' is not eligible for AI rendering.",
+        )
+
+    job_dir = os.path.join(UPLOADS_DIR, job_id)
+    if not os.path.isdir(job_dir):
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+
+    renders_dir = os.path.join(job_dir, "renders")
+    os.makedirs(renders_dir, exist_ok=True)
+    safe_room = "".join(c if c.isalnum() else "_" for c in room_id)
+
+    # Custom prompts AND a non-default camera frame each get their own cache
+    # slot so they never collide with — or overwrite — the default render.
+    resolved_heading = heading if heading is not None else _orientation_to_heading(orientation)
+    frame_variant = ""
+    if heading is not None or pitch != 0 or fov != 80:
+        frame_variant = f"__h{round(resolved_heading)}p{pitch}f{fov}"
+
+    variant = frame_variant
+    if custom_prompt.strip():
+        import hashlib
+        variant += "__" + hashlib.sha1(custom_prompt.strip().encode("utf-8")).hexdigest()[:10]
+
+    cache_path = os.path.join(renders_dir, f"{safe_room}__{strategy_id}{variant}.png")
+    source_path = os.path.join(renders_dir, f"{safe_room}__{strategy_id}{variant}__source.jpg")
+    meta_path = os.path.join(renders_dir, f"{safe_room}__{strategy_id}{variant}__meta.json")
+
+    if os.path.exists(cache_path) and os.path.exists(meta_path):
+        with open(meta_path, encoding="utf-8") as f:
+            meta = json.load(f)
+        return FileResponse(cache_path, media_type="image/png", headers={"X-Render-Source": meta["source"]})
+
+    view_type = render_view_type(strategy_id)
+    base_image: bytes | None = None
+    source = "screenshot"
+
+    if view_type == "exterior":
+        loc_path = os.path.join(job_dir, "location.json")
+        if os.path.exists(loc_path):
+            with open(loc_path, encoding="utf-8") as f:
+                loc = json.load(f)
+            try:
+                from analysis.street_view import fetch_facade_photo
+                base_image = await fetch_facade_photo(
+                    loc["lat"], loc["lon"], resolved_heading, pitch=pitch, fov=fov,
+                )
+                if base_image:
+                    source = "street_view"
+            except Exception as exc:
+                logger.warning("Street View fetch error for job %s: %s", job_id, exc)
+
+    if base_image is None:
+        if fallback_screenshot is None:
+            raise HTTPException(
+                status_code=422,
+                detail="No Street View coverage and no fallback screenshot provided. "
+                       "Capture a viewport screenshot and resend with fallback_screenshot.",
+            )
+        base_image = await fallback_screenshot.read()
+
+    try:
+        result_png = await generate_retrofit_render(
+            base_image, strategy_id, room_name=room_name, orientation=orientation,
+            custom_prompt=custom_prompt,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Render generation failed for job %s room %s strategy %s",
+                          job_id, room_id, strategy_id)
+        raise HTTPException(status_code=500, detail=f"Render failed: {exc}") from exc
+
+    # Save the source photo too — so the user can self-check Street View
+    # actually pointed at the right building/facade before trusting the render.
+    with open(source_path, "wb") as f:
+        f.write(base_image)
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump({"source": source}, f)
+    with open(cache_path, "wb") as f:
+        f.write(result_png)
+    logger.info("Job %s: rendered %s / %s via %s", job_id, room_id, strategy_id, source)
+
+    return FileResponse(cache_path, media_type="image/png", headers={"X-Render-Source": source})
+
+
+@app.get("/jobs/{job_id}/render_source")
+async def get_render_source(
+    job_id: str,
+    room_id: str,
+    strategy_id: str,
+    custom_prompt: str = "",
+    heading: float | None = None,
+    pitch: int = 0,
+    fov: int = 80,
+    orientation: str = "",
+):
+    """Return the source photo (Street View or viewport screenshot) a
+    cached render was generated from, so the user can verify Street View
+    actually captured the correct building/facade."""
+    job_dir = os.path.join(UPLOADS_DIR, job_id)
+    safe_room = "".join(c if c.isalnum() else "_" for c in room_id)
+
+    frame_variant = ""
+    if heading is not None or pitch != 0 or fov != 80:
+        resolved_heading = heading if heading is not None else _orientation_to_heading(orientation)
+        frame_variant = f"__h{round(resolved_heading)}p{pitch}f{fov}"
+
+    variant = frame_variant
+    if custom_prompt.strip():
+        import hashlib
+        variant += "__" + hashlib.sha1(custom_prompt.strip().encode("utf-8")).hexdigest()[:10]
+
+    source_path = os.path.join(job_dir, "renders", f"{safe_room}__{strategy_id}{variant}__source.jpg")
+    if not os.path.exists(source_path):
+        raise HTTPException(status_code=404, detail="Source photo not found for this render.")
+    return FileResponse(source_path, media_type="image/jpeg")
+
+
+def _orientation_to_heading(orientation_label: str) -> float:
+    """Compass label (N/NE/E/.../NW) → bearing degrees, for Street View heading."""
+    labels = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+    try:
+        return labels.index(orientation_label.upper()) * 45.0
+    except ValueError:
+        return 180.0  # default: look south

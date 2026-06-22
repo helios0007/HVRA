@@ -1,0 +1,43 @@
+.comfort-ring {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 6;
+  width: 92px;
+  height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.comfort-ring-svg {
+  position: absolute;
+  inset: 0;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
+}
+
+.comfort-ring-fill {
+  transition: stroke-dasharray 0.5s ease, stroke 0.4s ease;
+}
+
+.comfort-ring-text {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  pointer-events: none;
+}
+
+.comfort-ring-label {
+  font-size: 0.56rem;
+  font-weight: 600;
+  color: #ddd;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  max-width: 80px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 34px;
+}
