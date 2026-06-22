@@ -34,6 +34,97 @@ def _degrees_to_meters(degrees: float, latitude: float) -> float:
     return degrees * meters_per_deg_lon
 
 
+# ── Urban → building grounding signals (derived from already-fetched data) ──────
+# Consumed by the building-level tool via the frontend `urban_context` blob.
+
+# Coarse shortwave albedo per ground-material family. Names are matched by
+# substring against the Infrared ground_materials layer keys. Values are typical
+# midday albedos (Oke, Boundary Layer Climates; Santamouris 2013).
+_GROUND_ALBEDO = {
+    "water": 0.06, "asphalt": 0.10, "road": 0.10, "tarmac": 0.10,
+    "concrete": 0.30, "pavement": 0.27, "paving": 0.27, "stone": 0.25,
+    "soil": 0.20, "sand": 0.30, "bare": 0.20, "gravel": 0.20,
+    "grass": 0.23, "vegetation": 0.20, "tree": 0.18, "park": 0.22,
+    "roof": 0.20, "building": 0.20,
+}
+
+
+def _building_footprints(buildings_list):
+    """Return [(cx, cy, height_m), ...] in local metric space for each building.
+
+    Infrared returns building vertices as a flat [x,y,z, x,y,z, ...] array in
+    local metres; the footprint centroid is the mean of the XY vertices and the
+    height is `.height` (fallback: vertical extent of the vertices).
+    """
+    out = []
+    items = buildings_list.values() if isinstance(buildings_list, dict) else buildings_list
+    for b in items:
+        coords = getattr(b, "coordinates", None)
+        if not coords or len(coords) < 9:
+            continue
+        xs = coords[0::3]; ys = coords[1::3]; zs = coords[2::3]
+        cx = sum(xs) / len(xs); cy = sum(ys) / len(ys)
+        h = float(getattr(b, "height", 0.0) or 0.0)
+        if h <= 0.0 and zs:
+            h = max(zs) - min(zs)
+        if h > 0.0:
+            out.append((cx, cy, h))
+    return out
+
+
+def _zone_sky_openness(buildings_list, radius_m: float = 60.0) -> float | None:
+    """Zone-level sky-openness proxy in [0,1] (1 = open sky, lower = more shaded).
+
+    Heuristic SVF: for each building, bin neighbouring buildings within `radius_m`
+    into 8 azimuth sectors, take the tallest obstruction per sector as an elevation
+    angle atan(Δh / distance), and average sin(angle) across sectors (empty sectors
+    contribute 0 obstruction). Openness = 1 − mean obstruction, averaged over all
+    buildings. Returns None when geometry is unavailable. Not a CFD/raytraced SVF —
+    a fast neighbour-shading approximation from the massing already loaded.
+    """
+    fps = _building_footprints(buildings_list)
+    if len(fps) < 2:
+        return None
+    per_building = []
+    for i, (xi, yi, hi) in enumerate(fps):
+        sectors = [0.0] * 8
+        for j, (xj, yj, hj) in enumerate(fps):
+            if i == j:
+                continue
+            dx = xj - xi; dy = yj - yi
+            d = math.hypot(dx, dy)
+            if d <= 1.0 or d > radius_m:
+                continue
+            rel_h = hj - hi  # only neighbours taller than me block my sky
+            if rel_h <= 0.0:
+                continue
+            ang = math.atan2(rel_h, d)          # elevation angle to neighbour top
+            s = int(((math.degrees(math.atan2(dy, dx)) + 360) % 360) // 45)
+            sectors[s] = max(sectors[s], math.sin(ang))
+        obstruction = sum(sectors) / 8.0
+        per_building.append(max(0.0, 1.0 - obstruction))
+    if not per_building:
+        return None
+    openness = sum(per_building) / len(per_building)
+    return round(min(1.0, max(0.2, openness)), 3)
+
+
+def _ground_albedo(ground_layers) -> float | None:
+    """Mean shortwave albedo (0–1) from the zone's ground-material layer names."""
+    if not ground_layers:
+        return None
+    vals = []
+    for name in ground_layers:
+        key = str(name).lower()
+        for frag, alb in _GROUND_ALBEDO.items():
+            if frag in key:
+                vals.append(alb)
+                break
+    if not vals:
+        return None
+    return round(sum(vals) / len(vals), 3)
+
+
 def _create_buffer_zone(zone_geojson: Dict, buffer_meters: float = 150) -> Polygon:
     """Create a circular buffer zone around the zone's center point (150m radius).
 
@@ -419,6 +510,10 @@ async def analyze_zone_vulnerability(zone_geojson: Dict, center: List[float]) ->
             "vegetation_count": vegetation_count,
             "ground_layers": ground_layers,
             "thermal_source": thermal_source,
+            # Urban→building grounding signals derived from already-fetched data.
+            # Consumed by the building tool via the frontend `urban_context` blob.
+            "sky_openness": _zone_sky_openness(all_zone_buildings),  # 0–1 SVF proxy → solar shading
+            "ground_albedo": _ground_albedo(ground_layers),          # mean ground albedo 0–1
         },
         "simulation_grid": {
             "heatmap_image": heatmap_base64,

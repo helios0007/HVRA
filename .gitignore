@@ -35,6 +35,9 @@ backend/data/documents_index.json
 # Archived unused files
 _archive_unused/
 
+# Local test IFC models (downloaded samples to share, not part of the repo)
+test-ifc/
+
 # OS / editor
 .DS_Store
 Thumbs.db

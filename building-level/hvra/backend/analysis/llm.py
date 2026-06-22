@@ -290,11 +290,42 @@ Return ONLY valid JSON — no markdown, no code fences, no commentary:
 
 # ── Public entry point ──────────────────────────────────────────────────────────
 
+# [urban-grounding] Compact, model-facing summary of the urban tool's site context.
+# Returned as a dict embedded in the per-room JSON (the prompts forbid inventing
+# numbers, so the figures must travel inside the data the model reads — not as
+# free text). Returns None when no urban grounding was supplied.
+def _urban_site_context(urban_ctx: dict | None) -> dict | None:
+    if not urban_ctx:
+        return None
+    drivers = urban_ctx.get("drivers") or []
+    dominant = urban_ctx.get("dominant_driver")
+    if not dominant and drivers:
+        dominant = max(drivers, key=lambda d: d.get("severity", 0)).get("driver")
+    out = {
+        "note": "Outdoor zone conditions measured by the urban-scale tool — "
+                "weight the assessment toward this site context.",
+        "outdoor_peak_UTCI_C": urban_ctx.get("peak_utci_c"),
+        "outdoor_mean_UTCI_C": urban_ctx.get("mean_utci_c"),
+        "heat_stress_hours_pct": urban_ctx.get("heat_stress_pct"),
+        "outdoor_HVI_0_10": urban_ctx.get("building_hvi"),
+        "dominant_zone_driver": dominant,
+        "vegetation_count": urban_ctx.get("vegetation_count"),
+        "ground_albedo": urban_ctx.get("ground_albedo"),
+    }
+    if dominant:
+        out["site_priority"] = (
+            f"Prioritise strategies that address the zone's dominant driver: {dominant}."
+        )
+    # Drop keys the urban tool didn't provide so the model isn't fed nulls.
+    return {k: v for k, v in out.items() if v is not None}
+
+
 async def run_llm_stages(
     pipeline_result: dict[str, Any],
     job_dir: str,
     api_key: str,
     strategy_library: list[dict],
+    urban_ctx: dict | None = None,  # [urban-grounding] site context for diagnosis/shortlist
 ) -> dict[str, Any]:
     """
     Run Stage 3 (Building Interpreter) and Stage 4b (Retrofit Recommender)
@@ -338,11 +369,12 @@ async def run_llm_stages(
 
     lib_index = {s["id"]: s for s in strategy_library}
     llm_warnings: list[str] = []
+    site_ctx = _urban_site_context(urban_ctx)  # [urban-grounding] shared by both stages
 
     # ── Stage 3: all rooms in parallel (throttled) ─────────────────────────────
     logger.info("Stage 3: running Building Interpreter for %d rooms in parallel", len(room_jsons))
     stage3_results = await asyncio.gather(
-        *[_call_stage3(room, client, sem) for room in room_jsons],
+        *[_call_stage3(room, client, sem, site_ctx) for room in room_jsons],
         return_exceptions=True,
     )
     stage3_failures = 0
@@ -366,7 +398,7 @@ async def run_llm_stages(
     # ── Stage 4b: all rooms in parallel ────────────────────────────────────────
     logger.info("Stage 4b: running Retrofit Recommender for %d rooms in parallel", len(room_jsons))
     stage4b_results = await asyncio.gather(
-        *[_call_stage4b(room, lib_index, client, sem) for room in room_jsons],
+        *[_call_stage4b(room, lib_index, client, sem, site_ctx) for room in room_jsons],
         return_exceptions=True,
     )
     stage4b_failures = 0
@@ -399,7 +431,7 @@ async def run_llm_stages(
 
 # ── Internal: Stage 3 ──────────────────────────────────────────────────────────
 
-async def _call_stage3(room: dict, client, sem: "asyncio.Semaphore") -> dict:
+async def _call_stage3(room: dict, client, sem: "asyncio.Semaphore", site_ctx: dict | None = None) -> dict:
     """
     Call the LLM for Stage 3 (Building Interpreter) for one room.
     Returns {"diagnosis": str, "key_factors": list[str]}.
@@ -409,6 +441,8 @@ async def _call_stage3(room: dict, client, sem: "asyncio.Semaphore") -> dict:
     room_for_llm = {k: v for k, v in room.items() if k != "ai_outputs"}
     if "facades" in room_for_llm:
         room_for_llm["facades"] = _facades_for_llm(room_for_llm["facades"])
+    if site_ctx:  # [urban-grounding] embed measured outdoor zone context
+        room_for_llm["urban_site_context"] = site_ctx
 
     text = await _chat(
         client, sem,
@@ -434,7 +468,7 @@ async def _call_stage3(room: dict, client, sem: "asyncio.Semaphore") -> dict:
 
 # ── Internal: Stage 4b ─────────────────────────────────────────────────────────
 
-async def _call_stage4b(room: dict, lib_index: dict, client, sem: "asyncio.Semaphore") -> dict:
+async def _call_stage4b(room: dict, lib_index: dict, client, sem: "asyncio.Semaphore", site_ctx: dict | None = None) -> dict:
     """
     Call the LLM for Stage 4b (Retrofit Recommender) for one room.
     Returns {"shortlist": list[dict]}.
@@ -468,6 +502,8 @@ async def _call_stage4b(room: dict, lib_index: dict, client, sem: "asyncio.Semap
         "diagnosis":     room.get("ai_outputs", {}).get("diagnosis", ""),
         "key_factors":   room.get("ai_outputs", {}).get("key_factors", []),
     }
+    if site_ctx:  # [urban-grounding] bias ranking toward the zone's dominant driver
+        room_context["urban_site_context"] = site_ctx
 
     user_content = json.dumps(
         {"room": room_context, "eligible_strategies": eligible_strategies},

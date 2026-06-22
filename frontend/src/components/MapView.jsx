@@ -3,6 +3,7 @@ import mapboxgl from 'mapbox-gl';
 import MapboxDraw from '@mapbox/mapbox-gl-draw';
 import { centroid } from '@turf/turf';
 import InterventionVisualizer from './InterventionVisualizer';
+import MapSearch from './MapSearch';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
@@ -558,6 +559,9 @@ export default function MapView({ onZoneDrawn, simulationGrid, buildingData, ifc
         ref={mapContainer}
         style={{ width: '100%', height: '100%' }}
       />
+
+      {/* Location search — fly to a place before drawing a zone */}
+      <MapSearch mapRef={map} />
 
       {/* Building Vulnerability Legend */}
       {buildingData && (

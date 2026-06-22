@@ -59,6 +59,7 @@ def run_pipeline(
     mobility_limitations: bool,
     output_dir: str,
     urban_uhi_delta: float | None = None,  # [urban-grounding]
+    urban_ctx: dict | None = None,          # [urban-grounding] full site-context blob
 ) -> dict[str, Any]:
     """
     Run the Stage 2 calculation engine end-to-end for one building.
@@ -73,6 +74,15 @@ def run_pipeline(
         warnings      : list of warning strings
     """
     warnings: list[str] = []
+
+    # [urban-grounding] Resolve site-context values once. The blob is preferred;
+    # the legacy urban_uhi_delta scalar is the fallback for uhi_delta. Every value
+    # stays None when the urban tool didn't supply it → standalone behaviour.
+    _ctx = urban_ctx or {}
+    _uhi_day = _ctx.get("uhi_delta", urban_uhi_delta)
+    _uhi_night = _ctx.get("uhi_delta_night", _uhi_day)
+    _wind_override = _ctx.get("prevailing_wind_deg")
+    _shading_factor = _ctx.get("shading_factor")
 
     # ── 1. Parse IFC ────────────────────────────────────────────────────────
     logger.info("Parsing IFC: %s", ifc_path)
@@ -145,12 +155,13 @@ def run_pipeline(
     # [urban-grounding] If the urban tool measured a UHI delta for this zone,
     # use it instead of the generic barri-table average — building thermal
     # scores then reflect our actual site analysis, not a city default.
-    if urban_uhi_delta is not None:
+    if _uhi_day is not None:
         logger.info(
-            "UHI override: urban tool measured +%.1f°C (was barri %s +%.1f°C)",
-            urban_uhi_delta, neighbourhood, uhi_delta,
+            "UHI override: urban tool measured +%.1f°C day / +%.1f°C night (was barri %s +%.1f°C)",
+            float(_uhi_day), float(_uhi_night if _uhi_night is not None else _uhi_day),
+            neighbourhood, uhi_delta,
         )
-        uhi_delta = float(urban_uhi_delta)
+        uhi_delta = float(_uhi_day)
         neighbourhood = f"{neighbourhood} · urban-grounded"
     logger.info(
         "UHI: neighbourhood=%s, delta=+%.1f°C applied to all T_outdoor values",
@@ -192,6 +203,17 @@ def run_pipeline(
             solar_pos=solar_pos,
         )
 
+        # [urban-grounding] Attenuate solar gain by the urban tool's measured
+        # sky-openness (neighbour shading the single IFC + 100 m OSM can't fully
+        # capture). 1.0 = open sky (no change); <1.0 = shaded. Scaled in place so
+        # the reduction flows consistently into indoor-temp KPIs, the composite
+        # score, and per-façade pre-filter eligibility for shading strategies.
+        if _shading_factor is not None and 0.0 <= float(_shading_factor) < 1.0:
+            sf = float(_shading_factor)
+            solar.solar_gain_score = round(solar.solar_gain_score * sf, 3)
+            for _fs in solar.facades:
+                _fs.solar_gain_score = round(_fs.solar_gain_score * sf, 3)
+
         # Stage 2b — Ventilation
         vent = analyze_ventilation(
             facades=room.facades,
@@ -219,6 +241,9 @@ def run_pipeline(
             occupant=occupant,
             construction_year=construction_year,
             uhi_delta=uhi_delta,                 # ← applied to every T_outdoor hour
+            # [urban-grounding] warmer measured night UHI sharpens the nocturnal
+            # recovery KPI; None → falls back to uhi_delta (standalone unchanged).
+            uhi_delta_night=(float(_uhi_night) if _uhi_night is not None else None),
         )
 
         record = build_room_json(
@@ -266,6 +291,14 @@ def run_pipeline(
     wind_deg = prevailing_wind_direction(EPW_PATH)
     if wind_deg is None:
         wind_deg = 135.0
+    # [urban-grounding] Prefer the urban tool's site-measured prevailing wind
+    # (from the zone's own weather file) over the generic Barcelona EPW.
+    if _wind_override is not None:
+        try:
+            wind_deg = float(_wind_override) % 360.0
+            logger.info("Wind override: urban tool measured prevailing %.0f°", wind_deg)
+        except (TypeError, ValueError):
+            pass
 
     # Cross-ventilation diagnosis overlay — independent of the room scoring
     # above, so a failure here must never break the rest of the pipeline.
@@ -294,6 +327,10 @@ def run_pipeline(
         "epw_synthetic": is_synthetic,
         "neighbourhood": neighbourhood,
         "uhi_delta": uhi_delta,
+        # [urban-grounding] applied night UHI + shading so the UI can show what
+        # the urban grounding actually changed (null when standalone).
+        "uhi_delta_night": (float(_uhi_night) if _uhi_night is not None else None),
+        "shading_factor": (float(_shading_factor) if _shading_factor is not None else None),
         "epw_night_min": epw_night_min,
         "warnings": warnings,
     }

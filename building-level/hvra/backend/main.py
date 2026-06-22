@@ -53,6 +53,12 @@ async def upload_building(
     # this zone. When provided it overrides the barri-table lookup so building
     # thermal scores use our actual analysis. Absent → her standalone behaviour.
     urban_uhi_delta: float | None = Form(None),
+    # [urban-grounding] optional full site-context blob (JSON string) measured by
+    # the urban tool: uhi_delta(+night), peak/mean UTCI, heat-stress %, prevailing
+    # wind, outdoor HVI + drivers, vegetation/albedo, sky-openness shading factor.
+    # Every key is optional; absent → standalone behaviour unchanged. Supersedes
+    # urban_uhi_delta when both are present.
+    urban_context: str | None = Form(None),
 ):
     if not ifc_file.filename.lower().endswith(".ifc"):
         raise HTTPException(
@@ -83,6 +89,21 @@ async def upload_building(
     ac_bool       = ac_access.lower() == "yes"
     mobility_bool = mobility_limitations.lower() == "yes"
 
+    # [urban-grounding] Parse the optional urban site-context blob. Malformed or
+    # absent → urban_ctx stays None and the pipeline runs standalone. The legacy
+    # urban_uhi_delta scalar is folded in as a floor so older callers still ground.
+    urban_ctx: dict | None = None
+    if urban_context:
+        try:
+            parsed = json.loads(urban_context)
+            if isinstance(parsed, dict):
+                urban_ctx = parsed
+        except (ValueError, TypeError):
+            logger.warning("Job %s: ignoring malformed urban_context payload", job_id)
+    if urban_uhi_delta is not None:
+        urban_ctx = urban_ctx or {}
+        urban_ctx.setdefault("uhi_delta", urban_uhi_delta)
+
     try:
         from analysis.pipeline import run_pipeline
 
@@ -103,6 +124,7 @@ async def upload_building(
             mobility_limitations=mobility_bool,
             output_dir=job_dir,
             urban_uhi_delta=urban_uhi_delta,  # [urban-grounding]
+            urban_ctx=urban_ctx,              # [urban-grounding]
         )
 
         # Run async LLM stages (Stage 3 + 4b) directly in the async context.
@@ -114,7 +136,10 @@ async def upload_building(
             from analysis.llm import run_llm_stages
             from analysis.prefilter import load_strategy_library
             strategy_library = load_strategy_library()
-            result = await run_llm_stages(result, job_dir, api_key, strategy_library)
+            result = await run_llm_stages(
+                result, job_dir, api_key, strategy_library,
+                urban_ctx=urban_ctx,  # [urban-grounding] site context for diagnosis/shortlist
+            )
         elif not use_llm:
             result.setdefault("warnings", []).append(
                 "No LLM configured — Stage 3 (diagnosis) and Stage 4b (shortlist) skipped. "
@@ -144,6 +169,10 @@ async def upload_building(
         "epw_synthetic": result.get("epw_synthetic", False),
         "neighbourhood": result.get("neighbourhood", "unknown"),
         "uhi_delta": result.get("uhi_delta", 1.5),
+        # [urban-grounding] surface the applied night UHI + shading at top level
+        # (null when standalone) so the UI can show what the grounding changed.
+        "uhi_delta_night": result.get("uhi_delta_night"),
+        "shading_factor": result.get("shading_factor"),
         "epw_night_min": result.get("epw_night_min", 20.0),
         "warnings": result.get("warnings", []),
         "rooms": result["rooms"],
@@ -162,6 +191,7 @@ async def upload_building(
             "income_category": income_category,
             "mobility_limitations": mobility_limitations,
             "urban_uhi_delta": urban_uhi_delta,  # [urban-grounding] echo for transparency
+            "urban_context": urban_ctx,          # [urban-grounding] echo full blob (or None)
         },
     }
 

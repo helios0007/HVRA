@@ -16,7 +16,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { uploadBuilding } from '../services/buildingLevelAPI';
 import { getHVIColorHex } from '../utils/hviColors';
-import { urbanGroundingContext } from '../utils/urbanGrounding';
+import { urbanGroundingContext, buildUrbanContext } from '../utils/urbanGrounding';
 import Viewer3D from './building/Viewer3D';
 import RoomPanel from './building/RoomPanel';
 import PortfolioView from './building/PortfolioView';
@@ -73,6 +73,12 @@ export default function BuildingAnalysisTab({ selectedBuilding, urbanAnalysis })
   // Deep grounding: the urban tool's measured UHI delta for this zone, fed into
   // her pipeline so room thermal scores use our analysis, not a city average.
   const urban = useMemo(() => urbanGroundingContext(urbanAnalysis), [urbanAnalysis]);
+  // Full site-context blob fed to her pipeline (deep grounding — wind, night UHI,
+  // shading, outdoor HVI + drivers). Empty {} when no urban analysis is loaded.
+  const urbanCtx = useMemo(
+    () => buildUrbanContext(urbanAnalysis, selectedBuilding),
+    [urbanAnalysis, selectedBuilding],
+  );
 
   const [lat, setLat] = useState(grounded ? grounded[1] : 41.3851);
   const [lon, setLon] = useState(grounded ? grounded[0] : 2.1734);
@@ -179,10 +185,15 @@ export default function BuildingAnalysisTab({ selectedBuilding, urbanAnalysis })
     fd.append('lat', String(lat));
     fd.append('lon', String(lon));
     Object.entries(form).forEach(([k, v]) => fd.append(k, v));
-    // Deep grounding: pass our measured UHI delta so her pipeline overrides its
-    // barri-table default. Omitted when no urban analysis is loaded → she falls
-    // back to her own lookup (standalone behaviour unchanged).
+    // Deep grounding: pass the full measured site context (UHI day/night, peak/
+    // mean UTCI, heat-stress %, prevailing wind, outdoor HVI + drivers, vegetation/
+    // albedo, sky-openness shading). Her pipeline overrides its barri-table /
+    // generic defaults per-field. Empty {} when no urban analysis is loaded →
+    // standalone behaviour unchanged. `urban_uhi_delta` kept as a legacy fallback.
     if (urban.uhiDelta != null) fd.append('urban_uhi_delta', String(urban.uhiDelta));
+    if (urbanCtx && Object.keys(urbanCtx).length > 0) {
+      fd.append('urban_context', JSON.stringify(urbanCtx));
+    }
     try {
       const data = await uploadBuilding(fd);
       setResult(data);
@@ -337,6 +348,15 @@ export default function BuildingAnalysisTab({ selectedBuilding, urbanAnalysis })
             )}
             {groundDrivers.length > 0 && <> · {groundDrivers.slice(0, 3).join(', ')}</>}
           </span>
+          {Object.keys(urbanCtx).length > 0 && (
+            <span className="ba-grounding-extra">
+              {urbanCtx.uhi_delta_night != null && <em>night UHI +{urbanCtx.uhi_delta_night.toFixed(1)}°C</em>}
+              {urbanCtx.prevailing_wind_deg != null && <em>wind {Math.round(urbanCtx.prevailing_wind_deg)}°</em>}
+              {urbanCtx.shading_factor != null && <em>sky-openness {(urbanCtx.shading_factor * 100).toFixed(0)}%</em>}
+              {urbanCtx.dominant_driver && <em>priority: {urbanCtx.dominant_driver.replace(/_/g, ' ')}</em>}
+              {urbanCtx.ground_albedo != null && <em>albedo {urbanCtx.ground_albedo.toFixed(2)}</em>}
+            </span>
+          )}
         </div>
       ) : (
         <div className="ba-grounding ba-grounding--muted">

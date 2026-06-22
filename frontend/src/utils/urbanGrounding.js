@@ -70,3 +70,66 @@ export function urbanGroundingContext(vulnerabilityAnalysis) {
     zoneScore: typeof vulnerabilityAnalysis?.score === 'number' ? vulnerabilityAnalysis.score : null,
   };
 }
+
+// UHI is strongest a few hours after sunset (canopy-layer peak); the urban UTCI
+// run is daytime-only, so we bump the daytime delta by a fixed offset as a
+// documented heuristic for the building tool's nocturnal-recovery KPI.
+const NIGHT_UHI_OFFSET_C = 0.7;
+
+function num(x) { return typeof x === 'number' && !Number.isNaN(x) ? x : null; }
+
+/**
+ * Pick the highest-severity driver name from a vulnerability_analysis.drivers list.
+ * @returns {string|null}
+ */
+export function dominantDriver(vulnerabilityAnalysis) {
+  const drivers = vulnerabilityAnalysis?.drivers;
+  if (!Array.isArray(drivers) || drivers.length === 0) return null;
+  const top = drivers.reduce((a, b) => ((b?.severity ?? 0) > (a?.severity ?? 0) ? b : a));
+  return top?.driver ?? null;
+}
+
+/**
+ * Assemble the full `urban_context` payload sent to the building-level /upload.
+ * Every field is optional — keys with no measured value are omitted, so the
+ * building tool falls back to its standalone defaults for whatever is missing.
+ *
+ * @param {object} vulnerabilityAnalysis - selectedZone.vulnerability_analysis
+ * @param {object} [selectedBuilding] - clicked building GeoJSON feature (for HVI + per-building shading)
+ * @returns {object} compact JSON-serialisable context (may be empty)
+ */
+export function buildUrbanContext(vulnerabilityAnalysis, selectedBuilding) {
+  const cc = vulnerabilityAnalysis?.climate_context || {};
+  const props = selectedBuilding?.properties || {};
+
+  const uhi = urbanUhiDelta(vulnerabilityAnalysis);
+  const uhiNight = uhi != null
+    ? Math.round(clamp(uhi + NIGHT_UHI_OFFSET_C, UHI_MIN_C, 4.0) * 10) / 10
+    : null;
+
+  // Per-building sky-openness if the urban tool attached it; else the zone value.
+  const shading = num(props.sky_openness) ?? num(cc.sky_openness);
+  const hvi = num(props.hvi_score) ?? num(props.vulnerability_score);
+
+  const ctx = {
+    uhi_delta:           uhi,
+    uhi_delta_night:     uhiNight,
+    peak_utci_c:         num(cc.peak_utci_celsius),
+    mean_utci_c:         num(cc.mean_utci_celsius),
+    heat_stress_pct:     num(cc.heat_stress_hours_pct),
+    prevailing_wind_deg: num(cc.prevailing_wind_deg),
+    building_hvi:        hvi,
+    dominant_driver:     dominantDriver(vulnerabilityAnalysis),
+    drivers:             Array.isArray(vulnerabilityAnalysis?.drivers) ? vulnerabilityAnalysis.drivers : null,
+    vegetation_count:    num(cc.vegetation_count),
+    ground_albedo:       num(cc.ground_albedo),
+    shading_factor:      shading,
+    zone_score:          num(vulnerabilityAnalysis?.score),
+    analysis_period:     typeof cc.analysis_period === 'string' ? cc.analysis_period : null,
+  };
+
+  // Drop null/empty entries so the backend receives only measured signals.
+  return Object.fromEntries(
+    Object.entries(ctx).filter(([, v]) => v != null && !(Array.isArray(v) && v.length === 0))
+  );
+}

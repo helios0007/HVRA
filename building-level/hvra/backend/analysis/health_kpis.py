@@ -110,6 +110,7 @@ def compute_health_kpis(
     occupant: OccupantProfile,
     construction_year: str,
     uhi_delta: float = UHI_DELTA_DEFAULT,
+    uhi_delta_night: float | None = None,  # [urban-grounding] nocturnal UHI
 ) -> HealthKPIResult:
     """
     Compute all four health KPIs for a room.
@@ -153,7 +154,10 @@ def compute_health_kpis(
     # SOURCE: Samuelson et al. (2020); Public Health England (2015) — 26°C threshold.
     # SOURCE: UHI correction — T_outdoor_adjusted = T_epw + uhi_delta.
     T_3am_outdoor_epw = overnight_min_temp(climate_hours)
-    T_3am_outdoor_adjusted = T_3am_outdoor_epw + uhi_delta
+    # [urban-grounding] UHI is strongest at night; when the urban tool supplies a
+    # nocturnal delta use it for the overnight term (else the daytime uhi_delta).
+    _night_delta = uhi_delta_night if uhi_delta_night is not None else uhi_delta
+    T_3am_outdoor_adjusted = T_3am_outdoor_epw + _night_delta
     T_3am_indoor = _estimate_3am_indoor(T_3am_outdoor_adjusted, envelope.thermal_mass_score)
     nocturnal_fail = T_3am_indoor > NOCTURNAL_FAIL_THRESHOLD
     # SOURCE: NOCTURNAL_FAIL_THRESHOLD = 26°C — Samuelson et al. (2020)
