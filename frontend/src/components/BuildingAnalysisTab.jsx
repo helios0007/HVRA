@@ -117,14 +117,26 @@ export default function BuildingAnalysisTab({ selectedBuilding, urbanAnalysis })
     setSelectedRoom(room);
     setViewerTab('room');
   }, []);
-  const handleStrategyHighlight = useCallback((globalIds, hexColor, roomGlobalId) => {
+  const handleStrategyHighlight = useCallback((globalIds, hexColor, roomGlobalId, meta) => {
     viewerRef.current?.highlightElements(globalIds, hexColor, true, { roomGlobalId });
+    // [strategy-pins] drop a callout on the element so the strategy reads on the model
+    viewerRef.current?.showStrategyPins([
+      { globalIds, hexColor, roomGlobalId, label: meta?.label, sublabel: meta?.sublabel },
+    ]);
   }, []);
   const handleHighlightClear = useCallback(() => {
     viewerRef.current?.clearHighlights();
+    viewerRef.current?.clearStrategyPins();   // [strategy-pins]
   }, []);
   const handleStrategyHighlightGroups = useCallback((groups, opts) => {
     viewerRef.current?.highlightGroups(groups, true, opts);
+    // [strategy-pins] one callout for the whole ventilation strategy, anchored
+    // to its openings (or the room when the room has no openings of its own)
+    const allIds = groups.flatMap((g) => g.globalIds ?? []);
+    const roomGid = Array.isArray(opts?.roomGlobalIds) ? opts.roomGlobalIds[0] : opts?.roomGlobalId;
+    viewerRef.current?.showStrategyPins([
+      { globalIds: allIds, hexColor: groups[0]?.hexColor, roomGlobalId: roomGid, label: opts?.label, sublabel: opts?.sublabel },
+    ]);
   }, []);
   const handleInspectRoomToggle = useCallback((roomGlobalId, on, riskLevel) => {
     if (on) viewerRef.current?.highlightInspectedRoom(roomGlobalId, riskLevel);
@@ -301,6 +313,7 @@ export default function BuildingAnalysisTab({ selectedBuilding, urbanAnalysis })
                 key={result.job_id}
                 jobId={result.job_id}
                 rooms={result.rooms}
+                roofIds={result.roof_element_ids ?? []}
                 selectedRoom={selectedRoom}
                 onRoomSelect={handleRoomSelect}
                 beforeAfter={effectiveBeforeAfter}

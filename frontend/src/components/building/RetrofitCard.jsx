@@ -263,15 +263,23 @@ export default function RetrofitCard({ strategy, room, roofIds = [], windDeg, cr
       // having a valid multi-room path to draw. Gating on ventGroups.length
       // silently dropped the draw call for exactly those rooms.
       const hasPath = (ventPlan?.airflowPath?.length ?? 0) >= 2
+      // [strategy-pins] label shown on the on-model callout: name + ΔT + cost
+      const pinSub = [
+        strategy.delta_T_expected_C != null ? `−${strategy.delta_T_expected_C.toFixed(1)}°C` : null,
+        strategy.cost_eur_m2 === 0 ? 'Free'
+          : (strategy.cost_eur_m2 != null ? `€${strategy.cost_eur_m2.toFixed(0)}/m²` : null),
+      ].filter(Boolean).join(' · ')
       if (cat === 'C' && (ventGroups.length || hasPath) && onHighlightGroups) {
         onHighlightGroups(ventGroups, {
           airflowPath: ventPlan.airflowPath,
           roomGlobalIds: [room?.ifc_global_id].filter(Boolean),
           doorIds: ventPlan.doorIds,
           doorCentroids: ventPlan.doorCentroids,
+          label: name, sublabel: pinSub,   // [strategy-pins]
         })
       } else if (highlight && onHighlight) {
-        onHighlight(highlight.globalIds, highlight.hexColor, room?.ifc_global_id)
+        onHighlight(highlight.globalIds, highlight.hexColor, room?.ifc_global_id,
+          { label: name, sublabel: pinSub })   // [strategy-pins]
       }
     } else if (onHighlightClear) {
       onHighlightClear()

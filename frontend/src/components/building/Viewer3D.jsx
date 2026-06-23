@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react'
 import * as OBC from '@thatopen/components'
 import * as THREE from 'three'
+import { STRATEGY_META } from './strategyMeta'   // [strategy-pins] names/colours/targets
 import './Viewer3D.css'
 
 // [urban-port] her backend is reached through our Vite /bapi proxy (→ :8001)
@@ -20,7 +21,7 @@ const RISK_HEX_STR = {
   safe:     '#2ecc71',
 }
 
-const Viewer3D = forwardRef(function Viewer3D({ jobId, rooms, onRoomSelect, beforeAfter }, ref) {
+const Viewer3D = forwardRef(function Viewer3D({ jobId, rooms, roofIds = [], onRoomSelect, beforeAfter }, ref) {
   const containerRef = useRef(null)
   const modelRef = useRef(null)           // holds loaded FragmentsGroup
   // Original appearance store: fragment.id → { colorArray, mats } saved before
@@ -57,6 +58,83 @@ const Viewer3D = forwardRef(function Viewer3D({ jobId, rooms, onRoomSelect, befo
       })
     }
     flowRef.current = null
+  }
+
+  // ── [strategy-pins] HTML callouts anchored to highlighted elements ──────
+  // Each pin holds a world-space anchor (x,y,z) + label; a rAF loop projects
+  // it to screen each frame so the callout tracks the element as you orbit.
+  const [pins, setPins] = useState([])               // [{id,x,y,z,label,sublabel,hex}]
+  const [pinsEnabled, setPinsEnabled] = useState(true)
+  const pinsRef = useRef(pins); pinsRef.current = pins
+  const pinsEnabledRef = useRef(pinsEnabled); pinsEnabledRef.current = pinsEnabled
+  const cameraRef = useRef(null)                      // THREE camera, for projection
+  const pinNodeRefs = useRef(new Map())               // pin id → DOM node
+
+  // [strategy-pins] click-an-element inspector: a popover at the click point
+  // listing the clicked room's shortlisted strategies, each actionable.
+  const [inspectPopover, setInspectPopover] = useState(null)  // {x,y,room} | null
+
+  // Shared pin builder — used by the imperative API (card-driven) and by the
+  // click popover (model-driven). Places one callout per item at the top of
+  // its (room-filtered) element boxes.
+  const applyStrategyPins = (items) => {
+    const model = modelRef.current
+    if (!model || !Array.isArray(items) || !items.length) { setPins([]); return }
+    const next = []
+    items.forEach((it, i) => {
+      const ids = filterIdsNearRoom(model, it.globalIds ?? [], it.roomGlobalId)
+      let box = null
+      for (const gid of ids) {
+        const b = elementBox(model, gid)
+        if (b) box = box ? box.union(b) : b.clone()
+      }
+      if (!box && it.roomGlobalId) box = elementBox(model, it.roomGlobalId)
+      if (!box) return
+      const c = box.getCenter(new THREE.Vector3())
+      next.push({
+        id: `pin-${i}-${it.label ?? ''}`,
+        x: c.x, y: box.max.y, z: c.z,
+        label: it.label ?? 'Strategy', sublabel: it.sublabel ?? '', hex: it.hexColor ?? '#e67e22',
+      })
+    })
+    setPins(next)
+  }
+
+  // Resolve a strategy's target elements from STRATEGY_META + the room's facades
+  // (same target vocabulary RetrofitCard uses: wall / window / all_windows / roof).
+  const idsForStrategy = (room, strategyId) => {
+    const target = STRATEGY_META[strategyId]?.target
+    const facades = room?.facades ?? []
+    if (target === 'wall') return facades.map(f => f.wall_id).filter(Boolean)
+    if (target === 'window' || target === 'all_windows')
+      return facades.flatMap(f => f.window_ids ?? []).filter(Boolean)
+    if (target === 'roof') return roofIds
+    return []
+  }
+
+  // Model-driven pick: highlight + pin a strategy chosen from the click popover,
+  // without needing the side card. Falls back to pinning the room volume when a
+  // strategy has no trackable element (e.g. building-level / interior-door).
+  const pickStrategyOnModel = (room, item) => {
+    const model = modelRef.current
+    if (!model) return
+    const meta = STRATEGY_META[item.strategy_id] ?? {}
+    const hex = meta.highlightColor ?? '#e67e22'
+    const ids = idsForStrategy(room, item.strategy_id)
+    restoreOriginals(originalsRef.current, model)
+    clearFlow()
+    const filtered = filterIdsNearRoom(model, ids, room.ifc_global_id)
+    if (filtered.length) paintElements(model, originalsRef.current, filtered, hex)
+    const sub = [
+      item.delta_T_expected_C != null ? `−${item.delta_T_expected_C.toFixed(1)}°C` : null,
+      item.cost_eur_m2 === 0 ? 'Free' : (item.cost_eur_m2 != null ? `€${item.cost_eur_m2.toFixed(0)}/m²` : null),
+    ].filter(Boolean).join(' · ')
+    applyStrategyPins([{
+      globalIds: filtered.length ? filtered : [room.ifc_global_id],
+      roomGlobalId: room.ifc_global_id, hexColor: hex,
+      label: meta.name ?? item.strategy_id, sublabel: sub,
+    }])
+    setInspectPopover(null)
   }
 
   // ── Public API exposed to parent via ref ──────────────────────────────
@@ -244,6 +322,18 @@ const Viewer3D = forwardRef(function Viewer3D({ jobId, rooms, onRoomSelect, befo
         renderer.domElement.toBlob(blob => resolve(blob), 'image/jpeg', 0.92)
       })
     },
+
+    /**
+     * [strategy-pins] Show callout pins anchored to highlighted elements.
+     * One pin per item, placed at the top-centre of its (room-filtered)
+     * element boxes — so a strategy's name/ΔT/cost float on the actual wall,
+     * window, or room rather than only in the side card.
+     * @param {Array<{globalIds:string[], label:string, sublabel?:string, hexColor?:string, roomGlobalId?:string}>} items
+     */
+    showStrategyPins(items) { applyStrategyPins(items) },
+
+    /** [strategy-pins] Remove all strategy callout pins. */
+    clearStrategyPins() { setPins([]) },
   }))
 
   // ── Room volume (IfcSpace) visibility toggle ───────────────────────────
@@ -272,6 +362,37 @@ const Viewer3D = forwardRef(function Viewer3D({ jobId, rooms, onRoomSelect, befo
     const pos = min + (max - min) * (clipPct / 100)
     renderer.clippingPlanes = [new THREE.Plane(normals[clipAxis], pos)]
   }, [clipAxis, clipPct, loading])
+
+  // ── [strategy-pins] Project pin anchors to screen each frame ────────────
+  // Mounts once; reads pins/camera via refs so it never re-subscribes. Hides
+  // a pin when its anchor is behind the camera or off-screen.
+  useEffect(() => {
+    let raf = 0
+    const v = new THREE.Vector3()
+    const tick = () => {
+      raf = requestAnimationFrame(tick)
+      const cam = cameraRef.current
+      const container = containerRef.current
+      if (!cam || !container || !pinsEnabledRef.current || !pinsRef.current.length) return
+      const w = container.clientWidth
+      const h = container.clientHeight
+      for (const p of pinsRef.current) {
+        const node = pinNodeRefs.current.get(p.id)
+        if (!node) continue
+        v.set(p.x, p.y, p.z).project(cam)
+        if (v.z > 1 || v.x < -1.2 || v.x > 1.2 || v.y < -1.2 || v.y > 1.2) {
+          node.style.opacity = '0'
+          continue
+        }
+        const sx = (v.x * 0.5 + 0.5) * w
+        const sy = (-v.y * 0.5 + 0.5) * h
+        node.style.transform = `translate(-50%, -120%) translate(${sx}px, ${sy}px)`
+        node.style.opacity = '1'
+      }
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -314,7 +435,7 @@ const Viewer3D = forwardRef(function Viewer3D({ jobId, rooms, onRoomSelect, befo
       raycaster.setFromCamera(pointer, world.camera.three)
       const meshes = loadedModel.items.map(f => f.mesh).filter(Boolean)
       const intersects = raycaster.intersectObjects(meshes)
-      if (!intersects.length) return
+      if (!intersects.length) { setInspectPopover(null); return }  // [strategy-pins] click empty → close
 
       const hit = intersects[0]
       const fragment = loadedModel.items.find(f => f.mesh === hit.object)
@@ -328,7 +449,12 @@ const Viewer3D = forwardRef(function Viewer3D({ jobId, rooms, onRoomSelect, befo
           const exprSet = toIdSet(raw)
           if (exprSet?.has(expressId)) {
             const room = rooms.find(r => roomMatchesGlobalId(r, globalId))
-            if (room) { onRoomSelect(room); return }
+            if (room) {
+              onRoomSelect(room)
+              // [strategy-pins] open the on-model inspector at the click point
+              setInspectPopover({ x: event.clientX - rect.left, y: event.clientY - rect.top, room })
+              return
+            }
           }
         }
       } catch {}
@@ -368,6 +494,7 @@ const Viewer3D = forwardRef(function Viewer3D({ jobId, rooms, onRoomSelect, befo
 
       // Store renderer + bbox for the section cut control
       rendererRef.current = world.renderer?.three ?? null
+      cameraRef.current = world.camera?.three ?? null   // [strategy-pins] for projection
       const box = new THREE.Box3().setFromObject(model)
       bboxRef.current = box.isEmpty() ? null : box
 
@@ -404,6 +531,7 @@ const Viewer3D = forwardRef(function Viewer3D({ jobId, rooms, onRoomSelect, befo
       modelRef.current = null
       sceneRef.current = null
       rendererRef.current = null
+      cameraRef.current = null          // [strategy-pins]
       bboxRef.current = null
       originalsRef.current.clear()
       inspectOriginalsRef.current.clear()
@@ -417,6 +545,65 @@ const Viewer3D = forwardRef(function Viewer3D({ jobId, rooms, onRoomSelect, befo
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
+      {/* [strategy-pins] HTML callouts anchored to highlighted elements */}
+      {pinsEnabled && pins.length > 0 && (
+        <div className="viewer-pin-layer">
+          {pins.map(p => (
+            <div
+              key={p.id}
+              ref={el => { if (el) pinNodeRefs.current.set(p.id, el); else pinNodeRefs.current.delete(p.id) }}
+              className="viewer-pin"
+              style={{ '--pin-hex': p.hex, opacity: 0 }}
+            >
+              <span className="viewer-pin-dot" />
+              <span className="viewer-pin-text">
+                <strong>{p.label}</strong>
+                {p.sublabel && <em>{p.sublabel}</em>}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* [strategy-pins] click-an-element inspector: this room's strategies, on the model */}
+      {inspectPopover && (() => {
+        const room = inspectPopover.room
+        const shortlist = room?.ai_outputs?.shortlist ?? []
+        return (
+          <div className="viewer-inspect" style={{ left: inspectPopover.x, top: inspectPopover.y }}>
+            <div className="vi-head">
+              <span className="vi-room">{room.room_name ?? room.room_id}</span>
+              <button className="vi-close" onClick={() => setInspectPopover(null)} aria-label="Close">×</button>
+            </div>
+            {shortlist.length === 0 ? (
+              <p className="vi-empty">No strategies shortlisted for this room.</p>
+            ) : (
+              <ul className="vi-list">
+                {shortlist.map((it, i) => {
+                  const m = STRATEGY_META[it.strategy_id] ?? {}
+                  const cost = it.cost_eur_m2 === 0 ? 'Free'
+                    : (it.cost_eur_m2 != null ? `€${it.cost_eur_m2.toFixed(0)}/m²` : '')
+                  const sub = [
+                    it.delta_T_expected_C != null ? `−${it.delta_T_expected_C.toFixed(1)}°C` : null, cost,
+                  ].filter(Boolean).join(' · ')
+                  return (
+                    <li key={it.strategy_id ?? i} className="vi-item"
+                        onClick={() => pickStrategyOnModel(room, it)}>
+                      <span className="vi-dot" style={{ background: m.highlightColor ?? '#e67e22' }} />
+                      <span className="vi-text">
+                        <strong>{m.name ?? it.strategy_id}</strong>
+                        {sub && <em>{sub}</em>}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+            <p className="vi-hint">Click a strategy to show it on the model</p>
+          </div>
+        )
+      })()}
+
       {!loading && !error && (
         <div className="viewer-controls">
           <label className="viewer-spaces-toggle">
@@ -426,6 +613,16 @@ const Viewer3D = forwardRef(function Viewer3D({ jobId, rooms, onRoomSelect, befo
               onChange={e => setShowSpaces(e.target.checked)}
             />
             Show room risk volumes
+          </label>
+
+          {/* [strategy-pins] toggle the on-model strategy callouts */}
+          <label className="viewer-spaces-toggle">
+            <input
+              type="checkbox"
+              checked={pinsEnabled}
+              onChange={e => setPinsEnabled(e.target.checked)}
+            />
+            Strategy pins
           </label>
 
           <div className="viewer-section-cut">

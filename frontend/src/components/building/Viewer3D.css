@@ -114,3 +114,118 @@
   padding: 1px 5px;
   border-radius: 3px;
 }
+
+/* ── [strategy-pins] on-model callouts anchored to highlighted elements ── */
+.viewer-pin-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;            /* below .viewer-controls (5) so controls stay clickable */
+  pointer-events: none;  /* never block orbit/zoom */
+  overflow: hidden;
+}
+
+.viewer-pin {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform, opacity;
+  transition: opacity 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 230px;
+  padding: 6px 10px;
+  background: rgba(17, 22, 31, 0.92);
+  border: 1px solid var(--pin-hex, #e67e22);
+  border-left-width: 3px;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  color: #e8edf4;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+/* little pointer tail under the callout, toward the element */
+.viewer-pin::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid rgba(17, 22, 31, 0.92);
+}
+
+.viewer-pin-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--pin-hex, #e67e22);
+  flex-shrink: 0;
+}
+
+.viewer-pin-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.viewer-pin-text strong {
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.viewer-pin-text em {
+  font-style: normal;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+/* ── [strategy-pins] click-an-element inspector popover ── */
+.viewer-inspect {
+  position: absolute;
+  z-index: 6;                /* above pins (4) and controls (5) */
+  transform: translate(10px, 10px);
+  width: 248px;
+  max-height: 60%;
+  overflow-y: auto;
+  background: rgba(17, 22, 31, 0.96);
+  border: 1px solid #283242;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
+  color: #e8edf4;
+  font-size: 12px;
+}
+.vi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid #1e2734;
+}
+.vi-room { font-weight: 700; font-size: 13px; }
+.vi-close {
+  border: none; background: transparent; color: #94a3b8;
+  font-size: 17px; line-height: 1; cursor: pointer; padding: 0 2px;
+}
+.vi-close:hover { color: #e8edf4; }
+.vi-list { list-style: none; margin: 0; padding: 4px; }
+.vi-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 8px; border-radius: 7px; cursor: pointer;
+  transition: background 0.12s ease;
+}
+.vi-item:hover { background: rgba(255, 255, 255, 0.06); }
+.vi-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.vi-text { display: flex; flex-direction: column; min-width: 0; }
+.vi-text strong { font-weight: 600; font-size: 12px; }
+.vi-text em { font-style: normal; color: #94a3b8; font-size: 11px; }
+.vi-empty { padding: 12px; color: #94a3b8; }
+.vi-hint {
+  padding: 7px 12px; border-top: 1px solid #1e2734;
+  color: #64748b; font-size: 10.5px;
+}
